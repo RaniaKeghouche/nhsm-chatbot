@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHSM Helper - Study Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            /* Bordeaux/Dark Red Palette */
+            --primary-deep: #6D071A; /* Deep Bordeaux */
+            --primary-medium: #8C1B2F; /* Medium Bordeaux */
+            --primary-light-accent: #B83B5E; /* Lighter red for accents */
+            
+            --primary: var(--primary-medium);
+            --primary-darker: var(--primary-deep);
+            --accent: var(--primary-light-accent);
+
+            --text-light: #f8f9fa; /* Very light grey for text on dark backgrounds */
+            --text-dark: #212529;  /* Very dark grey/off-black for main text */
+            --text-muted: #6c757d; /* Muted grey for secondary text */
+            
+            --bg-main: #f1f3f5;      /* Light grey main background */
+            --bg-container: #ffffff; /* White container background */
+            --bg-chat-area: #e9ecef; /* Slightly darker grey for chat area */
+            --bg-input: #f8f9fa;     /* Very light grey for input field background */
+
+            --border-light: #dee2e6;
+            --border-focused: var(--primary);
+            
+            --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --shadow-medium: 0 8px 24px rgba(0, 0, 0, 0.07);
+
+            --error-bg: #f8d7da;
+            --error-text: #721c24;
+            --error-border: #f5c6cb;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+        }
+        
+        .chat-container {
+            width: 100%;
+            max-width: 480px;
+            background: var(--bg-container);
+            border-radius: 24px;
+            box-shadow: var(--shadow-medium);
+            overflow: hidden;
+            height: 85vh;
+            max-height: 750px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-light);
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, var(--primary-darker), var(--primary));
+            color: var(--text-light);
+            padding: 18px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .chat-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .bot-avatar {
+            width: 44px;
+            height: 44px;
+            background: var(--bg-container);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            overflow: hidden; /* To ensure logo fits well */
+        }
+        
+        .bot-avatar img {
+            width: 100%;
+            height: auto; /* Maintain aspect ratio */
+            max-height: 100%;
+            object-fit: contain; /* Show whole logo */
+        }
+        
+        .chat-header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .chat-header p {
+            font-size: 0.8rem;
+            margin: 0;
+            opacity: 0.85;
+        }
+        
+        .online-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            padding: 5px 10px;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 15px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #28a745; /* Green for online */
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        
+        .chat-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background-color: var(--bg-chat-area);
+        }
+        
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 20px;
+            position: relative;
+            animation: fadeIn 0.3s ease-out;
+            line-height: 1.55;
+            font-size: 0.92rem;
+            word-wrap: break-word;
+            box-shadow: var(--shadow-soft);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        .user-message {
+            background-color: var(--primary);
+            color: var(--text-light);
+            align-self: flex-end;
+            border-bottom-right-radius: 6px;
+        }
+        
+        .bot-message {
+            background-color: var(--bg-container);
+            color: var(--text-dark);
+            align-self: flex-start;
+            border-bottom-left-radius: 6px;
+            border: 1px solid var(--border-light);
+        }
+
+        .bot-message.error-message {
+            background-color: var(--error-bg);
+            color: var(--error-text);
+            border: 1px solid var(--error-border);
+        }
+        .bot-message.error-message .message-time {
+            color: var(--error-text);
+            opacity: 0.7;
+        }
+
+        .bot-message.sources-list {
+            background-color: #fdf1f3; /* Very light bordeaux tint for sources */
+            font-size: 0.85rem;
+            border-left: 4px solid var(--primary-light-accent);
+            padding-left: 15px;
+        }
+        .bot-message.sources-list strong {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--primary-darker);
+            font-weight: 600;
+        }
+        .bot-message.sources-list ul {
+            list-style-position: inside;
+            padding-left: 0;
+            margin-top: 5px;
+        }
+        .bot-message.sources-list li {
+            margin-bottom: 4px;
+            color: var(--text-muted);
+        }
+        
+        .message-time {
+            font-size: 0.7rem;
+            margin-top: 6px;
+            opacity: 0.7;
+            text-align: right;
+            display: block;
+        }
+        
+        .bot-message .message-time {
+            color: var(--text-muted);
+        }
+        
+        .user-message .message-time {
+            color: rgba(248, 249, 250, 0.75);
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 10px 15px;
+            background-color: var(--bg-container);
+            border-radius: 20px;
+            border-bottom-left-radius: 6px;
+            align-self: flex-start;
+            max-width: fit-content;
+            height: 40px;
+            box-shadow: var(--shadow-soft);
+            border: 1px solid var(--border-light);
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            opacity: 0.8;
+            animation: typingAnimation 1.4s infinite ease-in-out both;
+        }
+        
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typingAnimation {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        
+        .chat-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-light);
+            background-color: var(--bg-container);
+        }
+        
+        .message-input-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background-color: var(--bg-input);
+            border-radius: 25px;
+            padding: 5px;
+            border: 1px solid var(--border-light);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .message-input-container:focus-within {
+             border-color: var(--border-focused);
+             box-shadow: 0 0 0 3px hsla(var(--hue-primary, 345), 70%, 50%, 0.2);
+        }
+        
+        .message-input {
+            flex: 1;
+            border: none;
+            border-radius: 20px;
+            padding: 12px 18px;
+            outline: none;
+            font-size: 0.95rem;
+            background-color: transparent;
+            color: var(--text-dark);
+        }
+        
+        .send-button {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background-color: var(--primary);
+            color: var(--text-light);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.15s ease;
+        }
+        
+        .send-button:hover {
+            background-color: var(--primary-darker);
+            transform: scale(1.05);
+        }
+        
+        .send-button:active {
+            transform: scale(0.95);
+        }
+        
+        .send-button i {
+            font-size: 1.1rem;
+            transition: transform 0.2s ease;
+        }
+        .send-button:hover i {
+            transform: rotate(15deg);
+        }
+        
+        .branding {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        .branding span {
+            color: var(--primary-darker);
+            font-weight: 500;
+        }
+        
+        .chat-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-body::-webkit-scrollbar-track {
+            background: var(--bg-chat-area);
+            border-radius: 10px;
+        }
+        .chat-body::-webkit-scrollbar-thumb {
+            background: #adb5bd; /* Neutral scrollbar thumb */
+            border-radius: 10px;
+        }
+        .chat-body::-webkit-scrollbar-thumb:hover {
+            background: #868e96;
+        }
+
+        @media (max-width: 500px) {
+            .chat-container {
+                height: calc(100vh - 30px);
+                max-height: none;
+                border-radius: 15px;
+            }
+            body {
+                padding: 10px;
+            }
+            .chat-header h1 { font-size: 1.1rem; }
+            .message { padding: 10px 15px; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <div class="bot-avatar">
+                    <img src="https://th.bing.com/th/id/R.34b61d440a4cb340b8ac856f3159c2b1?rik=IqpkMdAHYTE0sw&riu=http%3a%2f%2fnhsm.edu.dz%2fwp-content%2fuploads%2f2022%2f07%2fH-3.png&ehk=tVyn4%2bLOcMLQGraYhtztV6dwSULaZkj7vmdano74OxU%3d&risl=&pid=ImgRaw&r=0" alt="NHSM Logo">
+                </div>
+                <div>
+                    <h1>NHSM Helper</h1>
+                    <p>Your Study Assistant</p>
+                </div>
+            </div>
+            <div class="online-indicator">
+                <div class="status-dot"></div>
+                <span>Online</span>
+            </div>
+        </div>
+        
+        <div class="chat-body" id="chatBody">
+            <!-- Initial bot message will be added by JS -->
+        </div>
+        
+        <div class="chat-footer">
+            <div class="message-input-container">
+                <input type="text" class="message-input" id="messageInput" placeholder="Ask your question..." onkeypress="handleKeyPress(event)">
+                <button class="send-button" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="branding">
+        Powered by <span>NHSM Helper</span> © 2025
+    </div>
+    
+    <script>
+        const chatBody = document.getElementById('chatBody');
+        const messageInput = document.getElementById('messageInput');
+        const API_ENDPOINT = '/api/query'; 
+        let isTyping = false;
+
+        // Local fallback responses in English
+        const localResponses = {
+            'time': "To manage your math study time effectively, I recommend:\n\n1. Pomodoro Technique: Work for 25 minutes, then take a 5-minute break. After 4 cycles, take a longer 15-30 minute break.\n\n2. Block Scheduling: Allocate specific time slots for different math topics, considering their difficulty.\n\n3. Eisenhower Matrix: Classify tasks by importance and urgency to prioritize better.\n\n4. Identify your peak productivity time and schedule the most challenging topics then.",
+            'notes': "For mathematics, I recommend these note-taking methods:\n\n1. Cornell Method: Divide your page into sections for key concepts, detailed notes, and summaries.\n\n2. Mind Mapping: Create visual diagrams to connect mathematical concepts.\n\n3. Color Coding: Use different colors for theorems, definitions, examples, and personal notes.\n\n4. Use precise mathematical symbols and take time to copy formulas correctly.",
+            'memorize': "To memorize complex math formulas:\n\n1. Understand First: Ensure you understand the reasoning behind each formula.\n\n2. Flashcards: Create cards with the formula on one side and its application on the other.\n\n3. Spaced Repetition: Review on an optimized schedule (e.g., after 1 day, 3 days, 7 days).\n\n4. Method of Loci: Associate each formula with a familiar place in your mind.\n\n5. Practical Application: Regularly solve problems using these formulas.\n\n6. Teach Someone Else: Explaining a formula is a great way to memorize it.",
+            'procrastination': "To overcome procrastination in your math studies:\n\n1. 5-Minute Rule: Commit to working on a difficult subject for just 5 minutes.\n\n2. Break down tasks into very small, specific, achievable micro-tasks.\n\n3. Use Pomodoro Technique to maintain focus.\n\n4. Eliminate digital distractions: Use blocking apps like Forest or Freedom.\n\n5. Create an optimal study environment, away from distractions.\n\n6. Reward yourself after achieving specific goals.\n\n7. Find a study partner for mutual accountability.",
+            'exam': "To prepare effectively for math exams:\n\n1. Start Early: Plan for at least 2 weeks of intensive review.\n\n2. Create condensed review sheets for each major topic.\n\n3. Practice with old exams, timing yourself.\n\n4. Identify your weak points and focus on them first.\n\n5. Form a study group to discuss difficult concepts.\n\n6. The day before: Review your sheets, but don't try to learn new concepts.\n\n7. Ensure you get good sleep and have a good breakfast on exam day."
+        };
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message !== '') {
+                addMessageToUI(message, 'user');
+                messageInput.value = '';
+                getResponseFromAPI(message);
+            }
+        }
+        
+        function addMessageToUI(content, sender, isErrorMessage = false, isSourcesMessage = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            
+            if (sender === 'user') {
+                messageDiv.classList.add('user-message');
+            } else {
+                messageDiv.classList.add('bot-message');
+                if (isErrorMessage) {
+                    messageDiv.classList.add('error-message');
+                }
+                if (isSourcesMessage) {
+                    messageDiv.classList.add('sources-list');
+                }
+            }
+            
+            const formattedContent = content.replace(/\n/g, '<br>');
+            messageDiv.innerHTML = formattedContent; 
+            
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const timeDiv = document.createElement('div');
+            timeDiv.classList.add('message-time');
+            timeDiv.textContent = `${hours}:${minutes}`;
+            messageDiv.appendChild(timeDiv);
+            
+            chatBody.appendChild(messageDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+        
+        function showTypingIndicator() {
+            if (!isTyping) {
+                isTyping = true;
+                const typingDiv = document.createElement('div');
+                typingDiv.id = 'typingIndicator';
+                typingDiv.classList.add('typing-indicator');
+                for (let i = 0; i < 3; i++) {
+                    const dot = document.createElement('div');
+                    dot.classList.add('typing-dot');
+                    typingDiv.appendChild(dot);
+                }
+                chatBody.appendChild(typingDiv);
+                chatBody.scrollTop = chatBody.scrollHeight;
+            }
+        }
+        
+        function hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+            isTyping = false;
+        }
+        
+        function getResponseFromAPI(userQuery) {
+            showTypingIndicator();
+
+            fetch(API_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ query: userQuery })
+            })
+            .then(response => {
+                hideTypingIndicator();
+                if (!response.ok) {
+                    return response.json()
+                        .then(errData => { throw new Error(errData.message || `Server error (${response.status})`); })
+                        .catch(() => { throw new Error(`Server error (${response.status} ${response.statusText})`); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success && data.answer) {
+                    addMessageToUI(data.answer, 'bot');
+                    if (data.sources && data.sources.length > 0) {
+                        displaySources(data.sources);
+                    }
+                } else {
+                    const errorMessage = data.message || "I couldn't find an answer.";
+                    addMessageToUI(errorMessage, 'bot', true);
+                    console.warn('Unsatisfactory backend response:', data);
+                }
+            })
+            .catch(error => {
+                hideTypingIndicator();
+                console.error('Error communicating with backend:', error);
+                addMessageToUI(`Oops! A technical error occurred (${error.message}). I'll try a local response.`, 'bot', true);
+                useLocalFallbackResponse(userQuery);
+            });
+        }
+        
+        function useLocalFallbackResponse(userQuery) {
+            const query = userQuery.toLowerCase();
+            let foundResponse = false;
+            
+            for (const keyword in localResponses) {
+                if (query.includes(keyword)) {
+                    addMessageToUI(localResponses[keyword], 'bot');
+                    foundResponse = true;
+                    break;
+                }
+            }
+            
+            if (!foundResponse) {
+                addMessageToUI("I'm sorry, I couldn't find an answer to that question, even locally. Please try another question.", 'bot', true);
+            }
+        }
+
+        function displaySources(sources) {
+            let sourcesHtml = '<strong>Relevant Sources:</strong><ul>';
+            sources.forEach(source => {
+                const sourceTitle = source.title || source.question || `ID: ${source.id || 'N/A'}`;
+                sourcesHtml += `<li>${source.category || 'Source'} - ${sourceTitle}</li>`;
+            });
+            sourcesHtml += '</ul>';
+            addMessageToUI(sourcesHtml, 'bot', false, true);
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function askQuestion(question) { // Kept if you want to use it programmatically later
+            messageInput.value = question;
+            sendMessage();
+        }
+
+        function addInitialBotMessage() {
+            const welcomeMessage = "Hello! I'm NHSM Helper, your personal assistant for studying mathematics effectively. How can I help you today?";
+            setTimeout(() => {
+                addMessageToUI(welcomeMessage, 'bot');
+            }, 500);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            addInitialBotMessage();
+            // For the CSS :focus-within on message-input-container
+            const inputField = document.getElementById('messageInput');
+            const inputContainer = document.querySelector('.message-input-container');
+            inputField.addEventListener('focus', () => inputContainer.style.borderColor = 'var(--border-focused)');
+            inputField.addEventListener('blur', () => inputContainer.style.borderColor = 'var(--border-light)');
+        });
+    </script>
+</body>
+</html>
