@@ -1,5 +1,5 @@
 // src/server.js
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }); // S'assurer que .env est chargé depuis la racine
+
 
 const mongoose = require('mongoose');
 const app = require('./app'); // Importe l'application Express configurée depuis app.js (notre Étape 2)
