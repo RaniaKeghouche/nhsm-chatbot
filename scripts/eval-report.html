@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NHSM Chatbot — Deep Evaluation Report</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px}
+  h1{font-size:2rem;margin-bottom:4px;background:linear-gradient(135deg,#6366f1,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  h2{font-size:1.2rem;color:#94a3b8;margin:32px 0 12px}
+  .subtitle{color:#64748b;margin-bottom:32px}
+  .hero{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:32px}
+  .card{background:#1e293b;border-radius:16px;padding:24px;flex:1;min-width:180px;text-align:center;border:1px solid #334155}
+  .card .value{font-size:3rem;font-weight:800}
+  .card .label{color:#64748b;font-size:.85rem;margin-top:4px}
+  .bar-wrap{background:#0f172a;border-radius:8px;height:12px;margin-top:8px;overflow:hidden}
+  .bar{height:100%;border-radius:8px;transition:width .4s}
+  table{width:100%;border-collapse:collapse;margin-bottom:32px;font-size:.82rem}
+  th{background:#1e293b;padding:10px 8px;text-align:left;color:#94a3b8;font-weight:600;position:sticky;top:0}
+  td{padding:8px;border-bottom:1px solid #1e293b;vertical-align:top}
+  tr:hover td{background:#1e293b55}
+  .query-cell{max-width:220px;font-style:italic;color:#cbd5e1}
+  .response-cell{max-width:300px;font-size:.75rem;color:#94a3b8}
+  .comment-cell{max-width:200px;color:#f59e0b;font-size:.75rem}
+  code{background:#334155;padding:2px 5px;border-radius:4px;font-size:.75rem}
+  .metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:32px}
+  .metric{background:#1e293b;border-radius:12px;padding:16px;text-align:center;border:1px solid #334155}
+  .metric .val{font-size:2rem;font-weight:700}
+  .metric .lbl{font-size:.75rem;color:#64748b;margin-top:4px}
+  .scroll-wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<h1>🧠 NHSM Chatbot — Deep Evaluation Report</h1>
+<p class="subtitle">LLM-as-Judge methodology | 60 tests | 03/06/2026 06:20:09 | Groq llama-3.1-8b-instant</p>
+
+<div class="hero">
+  <div class="card">
+    <div class="value" style="color:#3b82f6">75%</div>
+    <div class="label">Overall Score</div>
+    <div class="bar-wrap"><div class="bar" style="width:75%;background:#3b82f6"></div></div>
+  </div>
+  <div class="card">
+    <div class="value" style="color:#22c55e">32</div>
+    <div class="label">Grade A (≥90%)</div>
+  </div>
+  <div class="card">
+    <div class="value" style="color:#3b82f6">10</div>
+    <div class="label">Grade B (75-89%)</div>
+  </div>
+  <div class="card">
+    <div class="value" style="color:#f59e0b">0</div>
+    <div class="label">Grade C (60-74%)</div>
+  </div>
+  <div class="card">
+    <div class="value" style="color:#ef4444">18</div>
+    <div class="label">Grade F (<60%)</div>
+  </div>
+  <div class="card">
+    <div class="value">2731s</div>
+    <div class="label">Total Runtime</div>
+  </div>
+</div>
+
+<h2>📊 Metric Averages (out of 5)</h2>
+<div class="metric-grid">
+  <div class="metric">
+      <div class="val" style="color:#f59e0b">3.5</div>
+      <div class="lbl">🎯 Factual Accuracy</div>
+      <div class="bar-wrap"><div class="bar" style="width:70%;background:#f59e0b"></div></div>
+    </div><div class="metric">
+      <div class="val" style="color:#f59e0b">3.5</div>
+      <div class="lbl">📋 Completeness</div>
+      <div class="bar-wrap"><div class="bar" style="width:70%;background:#f59e0b"></div></div>
+    </div><div class="metric">
+      <div class="val" style="color:#22c55e">4.6</div>
+      <div class="lbl">🌐 Language Match</div>
+      <div class="bar-wrap"><div class="bar" style="width:92%;background:#22c55e"></div></div>
+    </div><div class="metric">
+      <div class="val" style="color:#f59e0b">3.4</div>
+      <div class="lbl">✨ Response Quality</div>
+      <div class="bar-wrap"><div class="bar" style="width:68%;background:#f59e0b"></div></div>
+    </div><div class="metric">
+      <div class="val" style="color:#3b82f6">3.8</div>
+      <div class="lbl">😊 Tone</div>
+      <div class="bar-wrap"><div class="bar" style="width:76%;background:#3b82f6"></div></div>
+    </div>
+</div>
+
+<h2>📂 Results by Category</h2>
+<div class="scroll-wrap">
+<table>
+  <thead><tr><th>Category</th><th>Tests</th><th>Avg Score</th><th>Factual</th><th>Completeness</th><th>Language</th><th>Quality</th><th>Tone</th></tr></thead>
+  <tbody><tr>
+      <td><b>Specialty</b></td>
+      <td>12</td>
+      <td style="color:#22c55e;font-weight:bold">92%</td>
+      <td>4.4/5</td>
+      <td>4.4/5</td>
+      <td>5.0/5</td>
+      <td>4.3/5</td>
+      <td>4.9/5</td>
+    </tr><tr>
+      <td><b>TeacherInfo</b></td>
+      <td>8</td>
+      <td style="color:#3b82f6;font-weight:bold">84%</td>
+      <td>3.6/5</td>
+      <td>3.9/5</td>
+      <td>5.0/5</td>
+      <td>3.9/5</td>
+      <td>4.5/5</td>
+    </tr><tr>
+      <td><b>StudyTip</b></td>
+      <td>8</td>
+      <td style="color:#22c55e;font-weight:bold">99%</td>
+      <td>5.0/5</td>
+      <td>5.0/5</td>
+      <td>5.0/5</td>
+      <td>4.8/5</td>
+      <td>5.0/5</td>
+    </tr><tr>
+      <td><b>Resource</b></td>
+      <td>5</td>
+      <td style="color:#22c55e;font-weight:bold">94%</td>
+      <td>4.8/5</td>
+      <td>4.4/5</td>
+      <td>5.0/5</td>
+      <td>4.4/5</td>
+      <td>5.0/5</td>
+    </tr><tr>
+      <td><b>Wellness</b></td>
+      <td>7</td>
+      <td style="color:#22c55e;font-weight:bold">99%</td>
+      <td>5.0/5</td>
+      <td>5.0/5</td>
+      <td>5.0/5</td>
+      <td>4.7/5</td>
+      <td>5.0/5</td>
+    </tr><tr>
+      <td><b>GeneralFAQ</b></td>
+      <td>7</td>
+      <td style="color:#ef4444;font-weight:bold">47%</td>
+      <td>2.0/5</td>
+      <td>1.7/5</td>
+      <td>4.3/5</td>
+      <td>1.9/5</td>
+      <td>2.0/5</td>
+    </tr><tr>
+      <td><b>StudentExperience</b></td>
+      <td>6</td>
+      <td style="color:#ef4444;font-weight:bold">33%</td>
+      <td>1.0/5</td>
+      <td>1.0/5</td>
+      <td>4.3/5</td>
+      <td>1.0/5</td>
+      <td>1.0/5</td>
+    </tr><tr>
+      <td><b>Humor</b></td>
+      <td>2</td>
+      <td style="color:#ef4444;font-weight:bold">28%</td>
+      <td>1.0/5</td>
+      <td>1.0/5</td>
+      <td>3.0/5</td>
+      <td>1.0/5</td>
+      <td>1.0/5</td>
+    </tr><tr>
+      <td><b>Edge</b></td>
+      <td>5</td>
+      <td style="color:#ef4444;font-weight:bold">37%</td>
+      <td>1.6/5</td>
+      <td>1.6/5</td>
+      <td>3.2/5</td>
+      <td>1.2/5</td>
+      <td>1.6/5</td>
+    </tr></tbody>
+</table>
+</div>
+
+<h2>🔬 All Test Results</h2>
+<div class="scroll-wrap">
+<table>
+  <thead><tr><th>ID</th><th>Cat</th><th>Lang</th><th>Query</th><th>Score</th><th>Fact</th><th>Cmpl</th><th>Lang</th><th>Qual</th><th>Tone</th><th>Judge Comment</th><th>Response Preview</th><th>Time</th></tr></thead>
+  <tbody><tr>
+      <td><code>SP-01</code></td>
+      <td>Specialty</td>
+      <td>fr</td>
+      <td class="query-cell">quelles sont toutes les spécialités disponibles à l'NHSM?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing accurate information about the available specializations at NHSM.</td>
+      <td class="response-cell">**Spécialités disponibles à l'NHSM**
+
+L'École Nationale Supérieure des Mathématiques (NHSM) propose quatre spécialités :
+
+1. **Statistiques pour les Économétrie et les Sciences Actuarielles (SESA)** : Cette spécialité se concentre sur les statistiques et la probabilité appliquée. Elle repose forteme...</td>
+      <td>2380ms</td>
+    </tr><tr>
+      <td><code>SP-02</code></td>
+      <td>Specialty</td>
+      <td>en</td>
+      <td class="query-cell">What exactly is the CCS specialty and what does it cover?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 84%</td>
+      <td>3</td>
+      <td>4</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response could benefit from more specific and reliable sources to support the information provided.</td>
+      <td class="response-cell">**CCS Specialty Overview**
+==========================
+
+According to the provided context, the CCS (Cryptography, Coding, and Security) specialty at NHSM focuses on computer science concepts like signal transmission, network protocols, and pure mathematical theories. It combines theoretical math with...</td>
+      <td>1111ms</td>
+    </tr><tr>
+      <td><code>SP-03</code></td>
+      <td>Specialty</td>
+      <td>fr</td>
+      <td class="query-cell">Explique moi la spécialité SESA en détail</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and clear, but could benefit from more detailed examples and explanations.</td>
+      <td class="response-cell">**Spécialité SESA en détail**
+
+## Présentation de la spécialité SESA
+
+La spécialité SESA (Statistics for Econometrics and Actuarial Sciences) est une spécialisation basée entièrement sur les statistiques et la probabilité appliquée. Elle repose fortement sur les mathématiques linéaires et la program...</td>
+      <td>12159ms</td>
+    </tr><tr>
+      <td><code>SP-04</code></td>
+      <td>Specialty</td>
+      <td>en</td>
+      <td class="query-cell">Tell me everything about the MS specialty</td>
+      <td style="color:#3b82f6;font-weight:bold">B 88%</td>
+      <td>4</td>
+      <td>4</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">Minor factual inaccuracies in the last sentence of the 'Skills Acquired' section.</td>
+      <td class="response-cell">**MS (Modeling and Simulation) Specialty at NHSM**
+=====================================================
+
+### Overview
+
+The MS (Modeling and Simulation) specialty at NHSM is one of the three applied mathematics specializations offered by the school. Students choose this specialty in their third year...</td>
+      <td>28524ms</td>
+    </tr><tr>
+      <td><code>SP-05</code></td>
+      <td>Specialty</td>
+      <td>en</td>
+      <td class="query-cell">What jobs can I get after graduating from CCS?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 88%</td>
+      <td>4</td>
+      <td>4</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response could benefit from more specific information about CCS graduates' job opportunities, but overall it's well-structured and helpful.</td>
+      <td class="response-cell">**Job Opportunities for CCS Graduates from NHSM**
+=====================================================
+
+According to the provided information, CCS graduates from NHSM have various job opportunities in:
+
+* Government
+* Tech companies
+* Firms handling digital databases
+* Cybersecurity companies (prot...</td>
+      <td>20558ms</td>
+    </tr><tr>
+      <td><code>SP-06</code></td>
+      <td>Specialty</td>
+      <td>fr</td>
+      <td class="query-cell">Quels sont les débouchés professionnels de la spécialité SESA?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and clear, but could benefit from more concise bullet points.</td>
+      <td class="response-cell">**Débouchés professionnels de la spécialité SESA**
+
+Selon les informations fournies, les débouchés professionnels pour les diplômés de la spécialité SESA sont nombreux et variés. Voici quelques-uns des postes et secteurs qui sont mentionnés :
+
+* **Banques et compagnies d'assurance** : les diplômés p...</td>
+      <td>23635ms</td>
+    </tr><tr>
+      <td><code>SP-07</code></td>
+      <td>Specialty</td>
+      <td>en</td>
+      <td class="query-cell">What skills will I develop in the MS specialty?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 88%</td>
+      <td>4</td>
+      <td>4</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is mostly accurate, but lacks specific details about the MS specialty at NHSM, which might be expected given the context.</td>
+      <td class="response-cell">**MS (Modeling and Simulation) Specialty at NHSM**
+=====================================================
+
+According to the provided information, the skills you will develop in the MS (Modeling and Simulation) specialty at NHSM include:
+
+### Modeling Skills
+* Familiarity with differential equations
+*...</td>
+      <td>22679ms</td>
+    </tr><tr>
+      <td><code>SP-08</code></td>
+      <td>Specialty</td>
+      <td>fr</td>
+      <td class="query-cell">À quel moment choisit-on sa spécialité à l'NHSM?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response could benefit from more detailed explanations and examples for each specialization.</td>
+      <td class="response-cell">**Choix de la spécialité à l'NHSM**
+
+Selon l'information fournie, le choix de la spécialité à l'NHSM se fait après avoir intégré la troisième année. C'est à partir de cette année que les étudiants choisissent leur spécialité, qu'ils commencent à étudier en quatrième année.
+
+Voici les spécialités act...</td>
+      <td>24625ms</td>
+    </tr><tr>
+      <td><code>SP-09</code></td>
+      <td>Specialty</td>
+      <td>ar</td>
+      <td class="query-cell">وش هوما تخصصات لي كاينين ف ليكول</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and informative, but could benefit from more concise descriptions of each topic.</td>
+      <td class="response-cell">**تخصصات لي كاينين ف ليكول**
+
+**لي كاينين 4 تخصصات ف ليكول**
+
+* **الرياضيات التطبيقية**: 3 تخصصات
+ + **الاحصاء و التأمين** (Statistics for Econometrics and Actuarial Sciences - SESA)
+ + **النمذجة و التخزين** (Modeling and Simulation - MS)
+ + **التشفير و الأمن** (Cryptography, Coding, and Security - ...</td>
+      <td>23069ms</td>
+    </tr><tr>
+      <td><code>SP-10</code></td>
+      <td>Specialty</td>
+      <td>fr</td>
+      <td class="query-cell">Quelle spécialité est la meilleure à NHSM pour trouver du travail rapidement?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and provides a comprehensive overview of the specializations at NHSM, making it a valuable resource for students seeking employment.</td>
+      <td class="response-cell">**Spécialités à NHSM pour trouver du travail rapidement**
+
+La question de savoir quelle spécialité est la meilleure à NHSM pour trouver du travail rapidement est complexe et dépend de plusieurs facteurs. Cependant, nous pouvons examiner les spécialités actuelles de l'école et leurs perspectives d'em...</td>
+      <td>28210ms</td>
+    </tr><tr>
+      <td><code>SP-11</code></td>
+      <td>Specialty</td>
+      <td>en</td>
+      <td class="query-cell">Is there an IMM or Astrophysics specialty at NHSM?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response could be more direct in stating that Astrophysics is not a specialty at NHSM, instead of saying 'no mention of' which might be misleading.</td>
+      <td class="response-cell">## **Specialty Availability at NHSM**
+
+Based on the provided context, there is no mention of an **IMM (Informatique Mathématique et Modélisation)** or **Astrophysics** specialty at NHSM.
+
+## **Specialties Currently Offered at NHSM**
+
+The school currently has four specialties:
+
+*   **Statistics for E...</td>
+      <td>26566ms</td>
+    </tr><tr>
+      <td><code>SP-12</code></td>
+      <td>Specialty</td>
+      <td>fr</td>
+      <td class="query-cell">Combien y a-t-il de spécialités à l'NHSM?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 76%</td>
+      <td>3</td>
+      <td>3</td>
+      <td>5</td>
+      <td>4</td>
+      <td>4</td>
+      <td class="comment-cell">The response mentions 'Mathématiques Pures (théoriques)' as a separate discussion, which might not be accurate or up-to-date information.</td>
+      <td class="response-cell">**Nombre de spécialités à l'NHSM**
+
+Il existe actuellement quatre spécialités à l'École Nationale Supérieure des Mathématiques (NHSM) :
+
+1. **Statistiques pour l'Econometrie et les Sciences Actuarielles (SESA)**
+2. **Modélisation et Simulation (MS)**
+3. **Cryptographye, Codage et Sécurité (CCS)**
+4....</td>
+      <td>20205ms</td>
+    </tr><tr>
+      <td><code>TC-01</code></td>
+      <td>TeacherInfo</td>
+      <td>en</td>
+      <td class="query-cell">Who is Professor Djemmada at NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is unhelpful and does not provide any factual information about Professor Djemmada.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>14912ms</td>
+    </tr><tr>
+      <td><code>TC-02</code></td>
+      <td>TeacherInfo</td>
+      <td>fr</td>
+      <td class="query-cell">Qui est le professeur Farhi et quelle est sa spécialité?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 88%</td>
+      <td>3</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is mostly accurate, but the name 'Bakir FARHI' seems to be incorrect, as the question asks about 'Professeur Farhi'.</td>
+      <td class="response-cell">**Professeur Bakir FARHI**
+
+Le professeur Bakir FARHI est un doctorant en mathématiques et professeur à l'École Nationale Supérieure des Mathématiques (NHSM) d'Alger.
+
+**Spécialités**
+
+Les spécialités du professeur Farhi sont :
+
+*   Théorie des nombres
+*   Théorie additive des nombres
+*   Séries de ...</td>
+      <td>30092ms</td>
+    </tr><tr>
+      <td><code>TC-03</code></td>
+      <td>TeacherInfo</td>
+      <td>en</td>
+      <td class="query-cell">Tell me about Professor Fatima Goura</td>
+      <td style="color:#3b82f6;font-weight:bold">B 80%</td>
+      <td>3</td>
+      <td>3</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is mostly accurate but lacks information about Professor Goura's specializations and research interests.</td>
+      <td class="response-cell">## Professor Fatima Goura at NHSM
+
+### Overview
+
+Professor Fatima Goura is a Ph.D. in English and a Professor at The National Higher School of Mathematics (NHSM).
+
+### Study and Experience
+
+*   University of Abdelhamid Ben Badis Mostaganem
+*   Professor of English since 2016
+
+### Contact Information...</td>
+      <td>24549ms</td>
+    </tr><tr>
+      <td><code>TC-04</code></td>
+      <td>TeacherInfo</td>
+      <td>fr</td>
+      <td class="query-cell">Qui est le meilleur professeur à l'NHSM selon les étudiants?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 76%</td>
+      <td>3</td>
+      <td>3</td>
+      <td>5</td>
+      <td>3</td>
+      <td>5</td>
+      <td class="comment-cell">Minor issues with completeness, could provide more context or evidence to support the claim.</td>
+      <td class="response-cell">**Le meilleur professeur à l'NHSM selon les étudiants**
+
+D'après les opinions exprimées par les étudiants, Djemmada est considéré comme le meilleur professeur de l'École Nationale Supérieure des Mathématiques (NHSM)....</td>
+      <td>22723ms</td>
+    </tr><tr>
+      <td><code>TC-05</code></td>
+      <td>TeacherInfo</td>
+      <td>en</td>
+      <td class="query-cell">How should I communicate with my professors at NHSM?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing all the necessary information for effective communication with professors at NHSM.</td>
+      <td class="response-cell">**Communicating with Professors at NHSM**
+
+Communicating effectively with your professors is crucial for your academic success at NHSM. Here are some common ways and tips to help you communicate with your professors:
+
+### 1. **During Office Hours**
+
+*   Professors set aside specific times each week ...</td>
+      <td>27795ms</td>
+    </tr><tr>
+      <td><code>TC-06</code></td>
+      <td>TeacherInfo</td>
+      <td>fr</td>
+      <td class="query-cell">Comment parler à mes professeurs à l'NHSM?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing excellent advice on how to communicate effectively with professors at NHSM.</td>
+      <td class="response-cell">**Comment Parler à vos Professeurs à l'NHSM**
+
+Pour communiquer efficacement et respectueusement avec vos professeurs à l'NHSM, voici quelques conseils :
+
+### 1. **Pendant les Heures de Bureau**
+
+*   C'est souvent la meilleure façon pour des discussions approfondies.
+*   Les professeurs réservent de...</td>
+      <td>31245ms</td>
+    </tr><tr>
+      <td><code>TC-07</code></td>
+      <td>TeacherInfo</td>
+      <td>ar</td>
+      <td class="query-cell">شكون هو أحسن أستاذ في المدرسة؟</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response could benefit from a more detailed explanation of why Djemmada is considered the best teacher.</td>
+      <td class="response-cell">**أحسن أستاذ في المدرسة NHSM**
+**دجمدة هو أحسن أستاذ في المدرسة NHSM**
+
+(هذا ما يقوله طالب من الطلاب)
+
+**ملاحظة هامة**
+هذا رأي شخصي من طالب، ويمكن أن يختلف رأي الطلاب الآخرين....</td>
+      <td>23476ms</td>
+    </tr><tr>
+      <td><code>TC-08</code></td>
+      <td>TeacherInfo</td>
+      <td>en</td>
+      <td class="query-cell">List the professors who teach cryptography at NHSM</td>
+      <td style="color:#22c55e;font-weight:bold">A 92%</td>
+      <td>4</td>
+      <td>4</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">Minor issue with Professor Abderrahim KESSIRA's association with cryptography.</td>
+      <td class="response-cell">**Professors Teaching Cryptography at NHSM**
+=============================================
+
+Based on the provided context, the following professors are associated with the CCS (Cryptography, Coding, and Security) specialty at NHSM:
+
+*   **Professor Anwar Nour Eddine Bahache**: His publications and m...</td>
+      <td>26249ms</td>
+    </tr><tr>
+      <td><code>ST-01</code></td>
+      <td>StudyTip</td>
+      <td>fr</td>
+      <td class="query-cell">Comment créer un bon planning d'étude?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing a thorough guide on how to create a good study plan.</td>
+      <td class="response-cell">**Créer un bon planning d'étude**
+
+Pour créer un bon planning d'étude, il est essentiel de suivre les étapes suivantes :
+
+### 1. **Consultez votre plan de cursus**
+
+*   Consultez votre plan de cursus pour connaître la séquence des cours recommandés pour votre major, semestre par semestre.
+*   C'est ...</td>
+      <td>36643ms</td>
+    </tr><tr>
+      <td><code>ST-02</code></td>
+      <td>StudyTip</td>
+      <td>en</td>
+      <td class="query-cell">What is the Pomodoro technique and how do I use it?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing a detailed explanation of the Pomodoro technique.</td>
+      <td class="response-cell">**The Pomodoro Technique: A Time Management Method**
+=====================================================
+
+The Pomodoro Technique is a popular time management method that helps you stay focused and productive by breaking down work sessions into short, manageable intervals called "Pomodoros." This t...</td>
+      <td>43206ms</td>
+    </tr><tr>
+      <td><code>ST-03</code></td>
+      <td>StudyTip</td>
+      <td>en</td>
+      <td class="query-cell">How does active recall work for studying?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing a thorough explanation of active recall and its application.</td>
+      <td class="response-cell">**Active Recall: A Powerful Study Technique**
+=====================================================
+
+Active recall is a study technique that involves actively retrieving information from your memory, rather than just passively re-reading or reviewing notes. It's based on the principle that the act o...</td>
+      <td>41558ms</td>
+    </tr><tr>
+      <td><code>ST-04</code></td>
+      <td>StudyTip</td>
+      <td>fr</td>
+      <td class="query-cell">Qu'est-ce que le spaced repetition?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and clear, but could benefit from more concise markdown formatting.</td>
+      <td class="response-cell">**Le Spaced Repetition**
+
+Le spaced repetition est une technique d'apprentissage qui consiste à réviser les informations à des intervalles de temps croissants pour renforcer la mémoire à long terme. Cela signifie que vous réviserez les informations peu de temps après avoir appris, puis à nouveau apr...</td>
+      <td>31665ms</td>
+    </tr><tr>
+      <td><code>ST-05</code></td>
+      <td>StudyTip</td>
+      <td>en</td>
+      <td class="query-cell">How should I take notes effectively?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, covering all key points effectively.</td>
+      <td class="response-cell">**Effective Note-Taking Strategies**
+
+Taking effective notes is a crucial skill for academic success. It helps you process, understand, and retain information, making it easier to review and recall later. Here are some strategies to help you take notes effectively:
+
+**During Lectures:**
+
+1.  **Liste...</td>
+      <td>46974ms</td>
+    </tr><tr>
+      <td><code>ST-06</code></td>
+      <td>StudyTip</td>
+      <td>fr</td>
+      <td class="query-cell">Comment améliorer ma concentration quand j'étudie?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and provides actionable tips to improve concentration during study sessions.</td>
+      <td class="response-cell">**Améliorer votre concentration lors de l'étude**
+
+Pour améliorer votre concentration lors de l'étude, il est essentiel de créer un environnement propice à la concentration et de mettre en œuvre des techniques pour gérer les distractions. Voici quelques conseils pour vous aider à améliorer votre con...</td>
+      <td>43761ms</td>
+    </tr><tr>
+      <td><code>ST-07</code></td>
+      <td>StudyTip</td>
+      <td>en</td>
+      <td class="query-cell">What is the best study environment?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response could benefit from more specific examples tailored to NHSM students.</td>
+      <td class="response-cell">**Optimal Study Environment for NHSM Students**
+
+Based on the provided guidelines and recommendations, here are some key points to consider when choosing the best study environment:
+
+### **Ideal Study Environment**
+
+*   **Quiet Space**: A quiet place is ideal for deep focus. If possible, try to stud...</td>
+      <td>29866ms</td>
+    </tr><tr>
+      <td><code>ST-08</code></td>
+      <td>StudyTip</td>
+      <td>fr</td>
+      <td class="query-cell">Comment éviter la procrastination?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and provides actionable strategies to overcome procrastination, making it an excellent resource for NHSM students.</td>
+      <td class="response-cell">**Éviter la procrastination : des stratégies pour réussir**
+
+La procrastination est un phénomène courant chez les étudiants. Pour y faire face, voici quelques stratégies qui peuvent vous aider :
+
+### 1. **Identifier la cause profonde**
+
+Comprenez pourquoi vous procrastinez. Est-ce que vous avez peur...</td>
+      <td>51910ms</td>
+    </tr><tr>
+      <td><code>RS-01</code></td>
+      <td>Resource</td>
+      <td>en</td>
+      <td class="query-cell">What online platforms can I use to study math at NHSM level?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and provides a comprehensive list of online platforms suitable for NHSM level math studies.</td>
+      <td class="response-cell">**Online Platforms for Studying Math at NHSM Level**
+
+As a student at the National Higher School of Mathematics (NHSM), you have access to various online platforms that can supplement your learning. Here are some popular options:
+
+### **Math-specific platforms:**
+
+*   **Khan Academy**: Offers a comp...</td>
+      <td>42313ms</td>
+    </tr><tr>
+      <td><code>RS-02</code></td>
+      <td>Resource</td>
+      <td>fr</td>
+      <td class="query-cell">Quelles chaînes YouTube recommandez-vous pour les maths?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and provides a comprehensive list of YouTube channels for math, making it a valuable resource for NHSM students.</td>
+      <td class="response-cell">**Réponses aux questions de mathématiques sur YouTube**
+
+Voici quelques chaînes YouTube recommandées pour les mathématiques :
+
+### Calcul et algèbre
+
+* **PatrickJMT** : offre des vidéos de résolution de problèmes étape par étape pour divers sujets mathématiques, notamment le calcul et l'algèbre.
+
+##...</td>
+      <td>33165ms</td>
+    </tr><tr>
+      <td><code>RS-03</code></td>
+      <td>Resource</td>
+      <td>en</td>
+      <td class="query-cell">Is there a Telegram group for NHSM students with books?</td>
+      <td style="color:#22c55e;font-weight:bold">A 92%</td>
+      <td>4</td>
+      <td>4</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response could be more specific about the absence of a dedicated Telegram group for NHSM students with books.</td>
+      <td class="response-cell">## NHSM Student Resources
+
+### Telegram Channels and Groups
+
+*   **Books and Resources:** Unfortunately, there is no specific Telegram group mentioned in the provided context that is exclusively dedicated to NHSM students with books. However, there is a Telegram channel mentioned that may contain bo...</td>
+      <td>21384ms</td>
+    </tr><tr>
+      <td><code>RS-04</code></td>
+      <td>Resource</td>
+      <td>fr</td>
+      <td class="query-cell">Comment trouver des exercices corrigés en mathématiques?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and provides a comprehensive list of resources, but could benefit from more detailed explanations and examples.</td>
+      <td class="response-cell">**Ressources pour trouver des exercices corrigés en mathématiques**
+
+Les étudiants de NHSM ont plusieurs options pour trouver des exercices corrigés en mathématiques :
+
+*   **Khan Academy** : Cette plateforme offre des leçons vidéo claires et des exercices en presque tous les sujets pertinents pour ...</td>
+      <td>26431ms</td>
+    </tr><tr>
+      <td><code>RS-05</code></td>
+      <td>Resource</td>
+      <td>en</td>
+      <td class="query-cell">Recommend me a resource for learning linear algebra</td>
+      <td style="color:#3b82f6;font-weight:bold">B 84%</td>
+      <td>5</td>
+      <td>3</td>
+      <td>5</td>
+      <td>3</td>
+      <td>5</td>
+      <td class="comment-cell">The response could be more comprehensive by providing additional information about the resource.</td>
+      <td class="response-cell">**Linear Algebra and Its Applications** **by Gilbert Strang** **is a comprehensive resource for linear algebra**....</td>
+      <td>25323ms</td>
+    </tr><tr>
+      <td><code>WL-01</code></td>
+      <td>Wellness</td>
+      <td>en</td>
+      <td class="query-cell">What are the signs that I'm not getting enough sleep?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, covering all key points and providing accurate information.</td>
+      <td class="response-cell">**Recognizing Signs of Insufficient Sleep**
+
+Sleep deprivation can manifest in various ways, affecting your physical, mental, and emotional state. Here are the common signs that you're not getting enough sleep:
+
+### **Physical and Mental Signs**
+
+*   **Excessive Daytime Sleepiness:** Feeling drowsy,...</td>
+      <td>32813ms</td>
+    </tr><tr>
+      <td><code>WL-02</code></td>
+      <td>Wellness</td>
+      <td>fr</td>
+      <td class="query-cell">Comment améliorer la qualité de mon sommeil?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing actionable tips to improve sleep quality.</td>
+      <td class="response-cell">**Améliorer la qualité de votre sommeil**
+
+La qualité de votre sommeil est tout aussi importante que la quantité de sommeil pour vous sentir réveillé et soutenir vos capacités cognitives. Pour améliorer la qualité de votre sommeil, il est essentiel de adopter de bonnes pratiques d'hygiène du sommeil...</td>
+      <td>48830ms</td>
+    </tr><tr>
+      <td><code>WL-03</code></td>
+      <td>Wellness</td>
+      <td>en</td>
+      <td class="query-cell">Should I nap during the day as a student?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, covering all key points and providing accurate information.</td>
+      <td class="response-cell">**The Benefits and Drawbacks of Napping as a Student**
+
+As a student at NHSM, it's essential to understand the role of napping in your daily routine. While napping can be beneficial, it's crucial to consider the timing, duration, and impact on your sleep schedule.
+
+**Benefits of Napping:**
+
+*   **Im...</td>
+      <td>37058ms</td>
+    </tr><tr>
+      <td><code>WL-04</code></td>
+      <td>Wellness</td>
+      <td>fr</td>
+      <td class="query-cell">L'exercice aide-t-il à mieux dormir?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and clear, but could benefit from a more concise summary of the key points.</td>
+      <td class="response-cell">**L'exercice et le sommeil**
+
+L'exercice physique est un outil puissant pour améliorer la qualité et la durée du sommeil. Il soutient un sommeil sain à travers plusieurs mécanismes.
+
+### **Réduction du stress et de l'anxiété**
+
+L'exercice est un soulageur de stress très efficace. Le stress réduit pe...</td>
+      <td>45406ms</td>
+    </tr><tr>
+      <td><code>WL-05</code></td>
+      <td>Wellness</td>
+      <td>en</td>
+      <td class="query-cell">How to manage stress and anxiety during exams?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and comprehensive, providing a thorough guide to managing stress and anxiety during exams.</td>
+      <td class="response-cell">**Managing Stress and Anxiety During Exams**
+
+Managing stress and anxiety during exams is crucial for maintaining focus, productivity, and overall well-being. Here are some effective strategies to help you cope with exam-related stress:
+
+### **Prepare Thoroughly**
+
+1.  **Study Consistently**: Develo...</td>
+      <td>41185ms</td>
+    </tr><tr>
+      <td><code>WL-06</code></td>
+      <td>Wellness</td>
+      <td>fr</td>
+      <td class="query-cell">Comment éviter le burn-out en tant qu'étudiant à l'NHSM?</td>
+      <td style="color:#22c55e;font-weight:bold">A 96%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and provides helpful advice, but could benefit from more specific examples related to the NHSM context.</td>
+      <td class="response-cell">**Éviter le burn-out à l'NHSM : Conseils et Astuces**
+
+Le burn-out est un problème courant chez les étudiants de l'NHSM, en particulier en raison de la pression et de la difficulté des études. Voici quelques conseils pour éviter le burn-out :
+
+* **Travaillez en équilibre** : Il est essentiel de trou...</td>
+      <td>34044ms</td>
+    </tr><tr>
+      <td><code>WL-07</code></td>
+      <td>Wellness</td>
+      <td>en</td>
+      <td class="query-cell">Does eating late at night affect my studies?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured, clear, and provides a comprehensive explanation of the topic.</td>
+      <td class="response-cell">**Impact of Late Night Eating on Studies**
+
+Eating late at night can have various effects on your studies, but the extent of its impact depends on several factors, including the type and quantity of food consumed, individual tolerance, and overall lifestyle.
+
+**Possible Effects:**
+
+*   **Digestion a...</td>
+      <td>20260ms</td>
+    </tr><tr>
+      <td><code>GF-01</code></td>
+      <td>GeneralFAQ</td>
+      <td>en</td>
+      <td class="query-cell">What is NHSM and what makes it different from other schools?</td>
+      <td style="color:#22c55e;font-weight:bold">A 100%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td class="comment-cell">The response is well-structured and provides a clear overview of NHSM, but it would benefit from more specific examples to support its claims.</td>
+      <td class="response-cell">**About NHSM**
+===============
+
+NHSM stands for École Nationale Supérieure des Mathématiques, which translates to the National Higher School of Mathematics in English. It is a specialized institution in Algeria that focuses on mathematics education.
+
+**What Makes NHSM Different**
+-------------------...</td>
+      <td>26778ms</td>
+    </tr><tr>
+      <td><code>GF-02</code></td>
+      <td>GeneralFAQ</td>
+      <td>fr</td>
+      <td class="query-cell">Comment s'inscrire à l'NHSM?</td>
+      <td style="color:#3b82f6;font-weight:bold">B 88%</td>
+      <td>5</td>
+      <td>3</td>
+      <td>5</td>
+      <td>4</td>
+      <td>5</td>
+      <td class="comment-cell">The response provides a good starting point, but it would be more helpful to include more specific information about the NHSM's inscription process.</td>
+      <td class="response-cell">**Inscription à l'NHSM**
+
+Je suis désolé, mais l'information n'est pas disponible dans le contexte fourni. Le contexte ne mentionne pas les procédures d'inscription à l'NHSM. Cependant, je peux vous suggérer quelques étapes générales pour vous aider à démarrer :
+
+* Vérifiez le site web officiel de l...</td>
+      <td>21443ms</td>
+    </tr><tr>
+      <td><code>GF-03</code></td>
+      <td>GeneralFAQ</td>
+      <td>en</td>
+      <td class="query-cell">What happens if a course I want is full? How do waitlists work?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not address the user's question.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>48024ms</td>
+    </tr><tr>
+      <td><code>GF-04</code></td>
+      <td>GeneralFAQ</td>
+      <td>fr</td>
+      <td class="query-cell">Comment planifier mes cours pour les prochains semestres?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not address the user's question.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>49026ms</td>
+    </tr><tr>
+      <td><code>GF-05</code></td>
+      <td>GeneralFAQ</td>
+      <td>en</td>
+      <td class="query-cell">What is orientation week like at NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not provide any information about orientation week at NHSM.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>43017ms</td>
+    </tr><tr>
+      <td><code>GF-06</code></td>
+      <td>GeneralFAQ</td>
+      <td>fr</td>
+      <td class="query-cell">Est-ce que l'NHSM garantit un emploi après la diplomation?</td>
+      <td style="color:#ef4444;font-weight:bold">F 0%</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td class="comment-cell">Judge error: 429 {"error":{"message":"Rate limit reached for model `llama-3.1-8b-instant` in </td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>81018ms</td>
+    </tr><tr>
+      <td><code>GF-07</code></td>
+      <td>GeneralFAQ</td>
+      <td>en</td>
+      <td class="query-cell">How do I change my specialty at NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not provide any accurate information about changing a specialty at NHSM.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>37355ms</td>
+    </tr><tr>
+      <td><code>SE-01</code></td>
+      <td>StudentExperience</td>
+      <td>en</td>
+      <td class="query-cell">What is student life like at NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not provide any relevant information about student life at NHSM.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>81678ms</td>
+    </tr><tr>
+      <td><code>SE-02</code></td>
+      <td>StudentExperience</td>
+      <td>fr</td>
+      <td class="query-cell">Comment se passe la vie étudiante à l'NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not provide any relevant information about the NHSM.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>84530ms</td>
+    </tr><tr>
+      <td><code>SE-03</code></td>
+      <td>StudentExperience</td>
+      <td>en</td>
+      <td class="query-cell">What advice do NHSM students give to newcomers?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is unhelpful and does not provide any relevant information to the user's question.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>92091ms</td>
+    </tr><tr>
+      <td><code>SE-04</code></td>
+      <td>StudentExperience</td>
+      <td>fr</td>
+      <td class="query-cell">Est-ce que l'NHSM est difficile? Comment les étudiants le vivent?</td>
+      <td style="color:#ef4444;font-weight:bold">F 20%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not address the user's question.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>96266ms</td>
+    </tr><tr>
+      <td><code>SE-05</code></td>
+      <td>StudentExperience</td>
+      <td>en</td>
+      <td class="query-cell">What happens if you repeat a year at NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not address the user's question.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>92962ms</td>
+    </tr><tr>
+      <td><code>SE-06</code></td>
+      <td>StudentExperience</td>
+      <td>en</td>
+      <td class="query-cell">How does studying at NHSM affect your personal development?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not address the question, instead, it claims a technical issue which is not relevant to the question asked.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>82518ms</td>
+    </tr><tr>
+      <td><code>HM-01</code></td>
+      <td>Humor</td>
+      <td>fr</td>
+      <td class="query-cell">C'est quoi le fameux 'ARD' et 'الحفلة' dans la culture NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 20%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not address the question at all.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>99133ms</td>
+    </tr><tr>
+      <td><code>HM-02</code></td>
+      <td>Humor</td>
+      <td>fr</td>
+      <td class="query-cell">T'as des blagues sur la vie étudiante à l'NHSM?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is unhelpful and does not address the user's question, instead providing a generic error message.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>94202ms</td>
+    </tr><tr>
+      <td><code>EG-01</code></td>
+      <td>Edge</td>
+      <td>any</td>
+      <td class="query-cell">hi</td>
+      <td style="color:#ef4444;font-weight:bold">F 20%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is unhelpful and does not address the user's greeting.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>91560ms</td>
+    </tr><tr>
+      <td><code>EG-02</code></td>
+      <td>Edge</td>
+      <td>any</td>
+      <td class="query-cell">what is the capital of Japan?</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is completely unhelpful and does not provide any relevant information to the user's question.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>90144ms</td>
+    </tr><tr>
+      <td><code>EG-03</code></td>
+      <td>Edge</td>
+      <td>fr</td>
+      <td class="query-cell">L'NHSM c'est nul, tu peux pas m'aider</td>
+      <td style="color:#ef4444;font-weight:bold">F 36%</td>
+      <td>1</td>
+      <td>1</td>
+      <td>5</td>
+      <td>1</td>
+      <td>1</td>
+      <td class="comment-cell">The response is not helpful and does not address the user's question, instead providing a generic error message.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>96470ms</td>
+    </tr><tr>
+      <td><code>EG-04</code></td>
+      <td>Edge</td>
+      <td>fr</td>
+      <td class="query-cell">كيفاش نذاكر باش نجح في ليكول؟</td>
+      <td style="color:#ef4444;font-weight:bold">F 0%</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td class="comment-cell">Judge error: 429 {"error":{"message":"Rate limit reached for model `llama-3.1-8b-instant` in </td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>175914ms</td>
+    </tr><tr>
+      <td><code>EG-05</code></td>
+      <td>Edge</td>
+      <td>any</td>
+      <td class="query-cell">zzzzzz aaaaaa random gibberish 12345</td>
+      <td style="color:#22c55e;font-weight:bold">A 92%</td>
+      <td>5</td>
+      <td>5</td>
+      <td>5</td>
+      <td>3</td>
+      <td>5</td>
+      <td class="comment-cell">The response is technically correct but lacks a clear explanation or attempt to address the user's input as nonsensical.</td>
+      <td class="response-cell">I'm sorry, I encountered a technical problem while trying to generate a response....</td>
+      <td>78072ms</td>
+    </tr></tbody>
+</table>
+</div>
+<p style="color:#475569;text-align:center;margin-top:32px">NHSM Chatbot Deep Evaluation — 2026</p>
+</body></html>

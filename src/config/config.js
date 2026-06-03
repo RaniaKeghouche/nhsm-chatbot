@@ -11,4 +11,7 @@ module.exports = {
 
   // --- Configuration du service IA (Groq) ---
   groqApiKey: process.env.GROQ_API_KEY,
+
+  // --- Configuration Cohere (embeddings) ---
+  cohereApiKey: process.env.COHERE_API_KEY,
 };

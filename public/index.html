@@ -395,30 +395,53 @@
         Powered by <span>NHSM Helper</span> © 2025
     </div>
     
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         const chatBody = document.getElementById('chatBody');
         const messageInput = document.getElementById('messageInput');
-        const API_ENDPOINT = 'https://nhsm-chatbot-api.onrender.com/api/query'; 
-        let isTyping = false;
+        const sendButton = document.querySelector('.send-button');
+        const API_ENDPOINT_STREAM = '/api/query-stream';
+        const API_ENDPOINT = '/api/query';
 
-        // Local fallback responses in English
-        const localResponses = {
-            'time': "To manage your math study time effectively, I recommend:\n\n1. Pomodoro Technique: Work for 25 minutes, then take a 5-minute break. After 4 cycles, take a longer 15-30 minute break.\n\n2. Block Scheduling: Allocate specific time slots for different math topics, considering their difficulty.\n\n3. Eisenhower Matrix: Classify tasks by importance and urgency to prioritize better.\n\n4. Identify your peak productivity time and schedule the most challenging topics then.",
-            'notes': "For mathematics, I recommend these note-taking methods:\n\n1. Cornell Method: Divide your page into sections for key concepts, detailed notes, and summaries.\n\n2. Mind Mapping: Create visual diagrams to connect mathematical concepts.\n\n3. Color Coding: Use different colors for theorems, definitions, examples, and personal notes.\n\n4. Use precise mathematical symbols and take time to copy formulas correctly.",
-            'memorize': "To memorize complex math formulas:\n\n1. Understand First: Ensure you understand the reasoning behind each formula.\n\n2. Flashcards: Create cards with the formula on one side and its application on the other.\n\n3. Spaced Repetition: Review on an optimized schedule (e.g., after 1 day, 3 days, 7 days).\n\n4. Method of Loci: Associate each formula with a familiar place in your mind.\n\n5. Practical Application: Regularly solve problems using these formulas.\n\n6. Teach Someone Else: Explaining a formula is a great way to memorize it.",
-            'procrastination': "To overcome procrastination in your math studies:\n\n1. 5-Minute Rule: Commit to working on a difficult subject for just 5 minutes.\n\n2. Break down tasks into very small, specific, achievable micro-tasks.\n\n3. Use Pomodoro Technique to maintain focus.\n\n4. Eliminate digital distractions: Use blocking apps like Forest or Freedom.\n\n5. Create an optimal study environment, away from distractions.\n\n6. Reward yourself after achieving specific goals.\n\n7. Find a study partner for mutual accountability.",
-            'exam': "To prepare effectively for math exams:\n\n1. Start Early: Plan for at least 2 weeks of intensive review.\n\n2. Create condensed review sheets for each major topic.\n\n3. Practice with old exams, timing yourself.\n\n4. Identify your weak points and focus on them first.\n\n5. Form a study group to discuss difficult concepts.\n\n6. The day before: Review your sheets, but don't try to learn new concepts.\n\n7. Ensure you get good sleep and have a good breakfast on exam day."
-        };
+        let isProcessing = false; // Protection contre questions multiples
 
         function sendMessage() {
             const message = messageInput.value.trim();
+            
+            // Protection contre questions multiples
+            if (isProcessing) {
+                addMessageToUI("Veuillez attendre la réponse à votre question précédente.", 'bot', true);
+                return;
+            }
+            
+            // Validation longueur
+            if (message.length > 1000) {
+                addMessageToUI("Votre message est trop long (max 1000 caractères).", 'bot', true);
+                return;
+            }
+            
             if (message !== '') {
                 addMessageToUI(message, 'user');
                 messageInput.value = '';
+                disableInput();
                 getResponseFromAPI(message);
             }
         }
-        
+
+        function disableInput() {
+            isProcessing = true;
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        }
+
+        function enableInput() {
+            isProcessing = false;
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        }
+
         function addMessageToUI(content, sender, isErrorMessage = false, isSourcesMessage = false) {
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message');
@@ -435,24 +458,147 @@
                 }
             }
             
-            const formattedContent = content.replace(/\n/g, '<br>');
-            messageDiv.innerHTML = formattedContent; 
+            messageDiv.innerHTML = marked.parse(content);
             
             const now = new Date();
-            const hours = now.getHours();
-            const minutes = now.getMinutes().toString().padStart(2, '0');
             const timeDiv = document.createElement('div');
             timeDiv.classList.add('message-time');
-            timeDiv.textContent = `${hours}:${minutes}`;
+            timeDiv.textContent = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
             messageDiv.appendChild(timeDiv);
             
             chatBody.appendChild(messageDiv);
             chatBody.scrollTop = chatBody.scrollHeight;
+            
+            return messageDiv;
         }
-        
+
+        // Streaming avec fallback
+        async function getResponseFromAPI(userQuery) {
+            showTypingIndicator();
+            
+            try {
+                // Essayer le streaming d'abord
+                await getStreamingResponse(userQuery);
+            } catch (error) {
+                console.log('Streaming failed, using fallback:', error);
+                await getFallbackResponse(userQuery);
+            }
+        }
+
+        async function getStreamingResponse(userQuery) {
+            const response = await fetch(API_ENDPOINT_STREAM, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/plain'
+                },
+                body: JSON.stringify({ query: userQuery })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Streaming failed: ${response.status}`);
+            }
+
+            hideTypingIndicator();
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            let buffer = '';
+            let sources = [];
+            let messageDiv = null;
+            let contentDiv = null;
+            
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    
+                    // Traiter les données du buffer
+                    if (buffer.includes('SOURCES:') && !sources.length) {
+                        const sourcesMatch = buffer.match(/SOURCES:(.+?)\n/);
+                        if (sourcesMatch) {
+                            sources = JSON.parse(sourcesMatch[1]);
+                            buffer = buffer.replace(/SOURCES:.+?\n\n/, '');
+                            
+                            // Créer le div de message une fois
+                            messageDiv = addMessageToUI('', 'bot');
+                            contentDiv = messageDiv.querySelector('p') || messageDiv;
+                            contentDiv.innerHTML = '';
+                        }
+                    }
+                    
+                    // Afficher le contenu au fur et à mesure
+                    if (messageDiv && contentDiv) {
+                        // Nettoyer les métadonnées
+                        const cleanBuffer = buffer.replace(/PROCESSING_TIME:.+/, '');
+                        contentDiv.innerHTML = marked.parse(cleanBuffer);
+                        chatBody.scrollTop = chatBody.scrollHeight;
+                    }
+                }
+                
+                // Afficher les sources à la fin
+                if (sources.length > 0) {
+                    displaySources(sources);
+                }
+                
+            } finally {
+                enableInput();
+            }
+        }
+
+        async function getFallbackResponse(userQuery) {
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ query: userQuery })
+                });
+
+                hideTypingIndicator();
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || `Erreur serveur (${response.status})`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success && data.answer) {
+                    addMessageToUI(data.answer, 'bot');
+                    if (data.sources && data.sources.length > 0) {
+                        displaySources(data.sources);
+                    }
+                } else {
+                    throw new Error(data.message || "Impossible de générer une réponse.");
+                }
+                
+            } catch (error) {
+                console.error('Fallback error:', error);
+                addMessageToUI(`Erreur: ${error.message}`, 'bot', true);
+                useLocalFallbackResponse(userQuery);
+            } finally {
+                enableInput();
+            }
+        }
+
+        function useLocalFallbackResponse(userQuery) {
+            const fallbackResponses = [
+                "Désolé, je ne peux pas répondre pour le moment. Veuillez réessayer plus tard.",
+                "Service temporairement indisponible. Merci de votre patience.",
+                "Erreur de connexion au serveur. Veuillez vérifier votre connexion internet."
+            ];
+            const randomResponse = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+            addMessageToUI(randomResponse, 'bot', true);
+        }
+
         function showTypingIndicator() {
-            if (!isTyping) {
-                isTyping = true;
+            if (!document.getElementById('typingIndicator')) {
                 const typingDiv = document.createElement('div');
                 typingDiv.id = 'typingIndicator';
                 typingDiv.classList.add('typing-indicator');
@@ -465,74 +611,16 @@
                 chatBody.scrollTop = chatBody.scrollHeight;
             }
         }
-        
+
         function hideTypingIndicator() {
             const typingIndicator = document.getElementById('typingIndicator');
             if (typingIndicator) {
                 typingIndicator.remove();
             }
-            isTyping = false;
-        }
-        
-        function getResponseFromAPI(userQuery) {
-            showTypingIndicator();
-
-            fetch(API_ENDPOINT, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({ query: userQuery })
-            })
-            .then(response => {
-                hideTypingIndicator();
-                if (!response.ok) {
-                    return response.json()
-                        .then(errData => { throw new Error(errData.message || `Server error (${response.status})`); })
-                        .catch(() => { throw new Error(`Server error (${response.status} ${response.statusText})`); });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success && data.answer) {
-                    addMessageToUI(data.answer, 'bot');
-                    if (data.sources && data.sources.length > 0) {
-                        displaySources(data.sources);
-                    }
-                } else {
-                    const errorMessage = data.message || "I couldn't find an answer.";
-                    addMessageToUI(errorMessage, 'bot', true);
-                    console.warn('Unsatisfactory backend response:', data);
-                }
-            })
-            .catch(error => {
-                hideTypingIndicator();
-                console.error('Error communicating with backend:', error);
-                addMessageToUI(`Oops! A technical error occurred (${error.message}). I'll try a local response.`, 'bot', true);
-                useLocalFallbackResponse(userQuery);
-            });
-        }
-        
-        function useLocalFallbackResponse(userQuery) {
-            const query = userQuery.toLowerCase();
-            let foundResponse = false;
-            
-            for (const keyword in localResponses) {
-                if (query.includes(keyword)) {
-                    addMessageToUI(localResponses[keyword], 'bot');
-                    foundResponse = true;
-                    break;
-                }
-            }
-            
-            if (!foundResponse) {
-                addMessageToUI("I'm sorry, I couldn't find an answer to that question, even locally. Please try another question.", 'bot', true);
-            }
         }
 
         function displaySources(sources) {
-            let sourcesHtml = '<strong>Relevant Sources:</strong><ul>';
+            let sourcesHtml = '<strong>Sources pertinentes:</strong><ul>';
             sources.forEach(source => {
                 const sourceTitle = source.title || source.question || `ID: ${source.id || 'N/A'}`;
                 sourcesHtml += `<li>${source.category || 'Source'} - ${sourceTitle}</li>`;
@@ -540,32 +628,18 @@
             sourcesHtml += '</ul>';
             addMessageToUI(sourcesHtml, 'bot', false, true);
         }
-        
+
         function handleKeyPress(event) {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && !isProcessing) {
                 sendMessage();
             }
         }
-        
-        function askQuestion(question) { // Kept if you want to use it programmatically later
-            messageInput.value = question;
-            sendMessage();
-        }
 
-        function addInitialBotMessage() {
-            const welcomeMessage = "Hello! I'm NHSM Helper, your personal assistant for studying mathematics effectively. How can I help you today?";
-            setTimeout(() => {
-                addMessageToUI(welcomeMessage, 'bot');
-            }, 500);
-        }
-
+        // Message d'accueil
         document.addEventListener('DOMContentLoaded', () => {
-            addInitialBotMessage();
-            // For the CSS :focus-within on message-input-container
-            const inputField = document.getElementById('messageInput');
-            const inputContainer = document.querySelector('.message-input-container');
-            inputField.addEventListener('focus', () => inputContainer.style.borderColor = 'var(--border-focused)');
-            inputField.addEventListener('blur', () => inputContainer.style.borderColor = 'var(--border-light)');
+            setTimeout(() => {
+                addMessageToUI("Bonjour! Je suis NHSM Helper, votre assistant personnel pour étudier les mathématiques efficacement. Comment puis-je vous aider aujourd'hui?", 'bot');
+            }, 500);
         });
     </script>
 </body>

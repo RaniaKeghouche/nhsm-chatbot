@@ -1,0 +1,18 @@
+[
+  {
+    "comment": "Copy this JSON for EACH of your 9 collections in Atlas UI:",
+    "comment2": "Atlas → Search Indexes → Create Index → JSON Editor → paste this",
+    "name": "vector_index",
+    "type": "vectorSearch",
+    "definition": {
+      "fields": [
+        {
+          "type": "vector",
+          "path": "embedding",
+          "numDimensions": 1024,
+          "similarity": "cosine"
+        }
+      ]
+    }
+  }
+]

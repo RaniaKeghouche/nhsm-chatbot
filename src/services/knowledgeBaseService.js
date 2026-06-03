@@ -1,175 +1,236 @@
 // src/services/knowledgeBaseService.js
+// Vector search via in-memory cosine similarity (works on any Atlas tier)
+// Falls back to keyword search if embeddings are not available
+
 const { MathTip, GeneralFAQ, Resource, Wellness, StudyTip, TeacherInfo, Specialty, StudentExperience, Humor } = require('../models');
+const embeddingService = require('./embeddingService');
+const config = require('../config/config');
 
 const collectionNameMap = {
-    'MathTip': 'Math Tip', 'GeneralFAQ': 'General FAQ', 'Resource': 'Resource', 'Wellness': 'Wellness Tip',
-    'StudyTip': 'Study Tip', 'TeacherInfo': 'Teacher Information', 'Specialty': 'Specialty Information',
-    'StudentExperience': 'Student Experience', 'Humor': 'Humor Item'
+  'MathTip': 'Math Tip', 'GeneralFAQ': 'General FAQ', 'Resource': 'Resource',
+  'Wellness': 'Wellness Tip', 'StudyTip': 'Study Tip', 'TeacherInfo': 'Teacher Information',
+  'Specialty': 'Specialty Information', 'StudentExperience': 'Student Experience', 'Humor': 'Humor Item'
 };
+
+const TOP_RESULTS    = 8;    // final context docs sent to AI
+const MIN_SIM_SCORE  = 0.38; // cosine similarity threshold — raised from 0.30 to filter noise
 
 class KnowledgeBaseService {
   constructor() {
-    console.log('[KBService Constructor] Initializing...');
+    console.log('[KBService] Initializing...');
     this.collectionSearchConfig = [
-      { model: MathTip, name: 'MathTip', fields: ['question', 'answer', 'tags'] },
-      { model: GeneralFAQ, name: 'GeneralFAQ', fields: ['question', 'answer', 'tags'] },
-      { model: Resource, name: 'Resource', fields: ['question', 'answer', 'tags'] },
-      { model: Wellness, name: 'Wellness', fields: ['question', 'answer', 'tags'] },
-      { model: StudyTip, name: 'StudyTip', fields: ['question', 'answer', 'tags'] },
-      { model: TeacherInfo, name: 'TeacherInfo', fields: ['id', 'name', 'question', 'answer', 'tags'] },
-      { model: Specialty, name: 'Specialty', fields: ['id', 'question', 'answer', 'tags'] },
-      { model: StudentExperience, name: 'StudentExperience', fields: ['question', 'answer', 'tags'] },
-      { model: Humor, name: 'Humor', fields: ['question', 'answer', 'tags'] }
+      { model: MathTip,          name: 'MathTip',          fields: ['question', 'answer', 'tags'] },
+      { model: GeneralFAQ,       name: 'GeneralFAQ',       fields: ['question', 'answer', 'tags'] },
+      { model: Resource,         name: 'Resource',         fields: ['question', 'answer', 'tags'] },
+      { model: Wellness,         name: 'Wellness',         fields: ['question', 'answer', 'tags'] },
+      { model: StudyTip,         name: 'StudyTip',         fields: ['question', 'answer', 'tags'] },
+      { model: TeacherInfo,      name: 'TeacherInfo',      fields: ['id', 'name', 'question', 'answer', 'tags'] },
+      { model: Specialty,        name: 'Specialty',        fields: ['id', 'question', 'answer', 'tags'] },
+      { model: StudentExperience,name: 'StudentExperience',fields: ['question', 'answer', 'tags'] },
+      { model: Humor,            name: 'Humor',            fields: ['question', 'answer', 'tags'] },
     ];
-    this.validCollectionsToSearch = this.collectionSearchConfig.filter(c => c.model && typeof c.model.find === 'function');
-    console.log(`[KBService Constructor] Initialized. Valid collections: ${this.validCollectionsToSearch.length}.`);
+    this.validCollections = this.collectionSearchConfig.filter(
+      c => c.model && typeof c.model.find === 'function'
+    );
+    // In-memory cache of all docs with embeddings (loaded once on first search)
+    this._docCache     = null;
+    this._cacheLoading = false;
+    console.log(`[KBService] Ready. Collections: ${this.validCollections.length}`);
   }
-   
+
+  // ══════════════════════════════════════════════════════════════════════
+  // PUBLIC: Main entry point
+  // ══════════════════════════════════════════════════════════════════════
   async findRelevantInfoWithKeywords(keywords = []) {
-        console.log(`[KBService.findRelevantInfoWithKeywords] START - Pre-processed Keywords: ${JSON.stringify(keywords)}`);
-        console.time('KBService.findRelevantInfoWithKeywords_TotalTime');
+    if (keywords.length === 0) return [];
+    console.time('KBService_TotalTime');
 
-        if (keywords.length === 0) {
-            console.log('[KBService.findRelevantInfoWithKeywords] No keywords provided.');
-            console.timeEnd('KBService.findRelevantInfoWithKeywords_TotalTime');
-            return [];
+    const queryText = keywords.join(' ');
+    let results;
+
+    if (config.cohereApiKey) {
+      try {
+        results = await this._vectorSearch(queryText, keywords);
+        if (results.length > 0) {
+          console.log(`[KBService] Vector search: ${results.length} results. Top similarity: ${results[0]._vectorScore?.toFixed(3)}`);
+          console.timeEnd('KBService_TotalTime');
+          return results;
         }
-
-        const resultsPromises = this.validCollectionsToSearch.map(config =>
-            this.searchAndScore(config, keywords)
-        );
-
-        const allScoredResults = (await Promise.all(resultsPromises)).flat();
-        
-        allScoredResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-        console.log(`[KBService.findRelevantInfoWithKeywords] Found ${allScoredResults.length} potential items. Top score: ${allScoredResults.length > 0 ? allScoredResults[0].relevanceScore : 'N/A'}`);
-        
-        const uniqueResults = this.deduplicateAndNormalizeResults(allScoredResults);
-        console.log(`[KBService.findRelevantInfoWithKeywords] Unique relevant info items prepared: ${uniqueResults.length}`);
-        console.timeEnd('KBService.findRelevantInfoWithKeywords_TotalTime');
-        return uniqueResults;
+        console.log('[KBService] Vector search returned 0 results, falling back to keywords');
+      } catch (err) {
+        console.warn(`[KBService] Vector search failed: ${err.message} — falling back to keywords`);
+      }
     }
+
+    results = await this._keywordSearch(keywords);
+    console.log(`[KBService] Keyword search: ${results.length} results`);
+    console.timeEnd('KBService_TotalTime');
+    return results;
+  }
 
   async findRelevantInfo(query) {
-    console.log(`[KBService.findRelevantInfo] START - Query: "${query}"`);
-    console.time('KBService.findRelevantInfo_TotalTime');
-    const lowerQuery = query.toLowerCase();
-
-    if (lowerQuery.includes('all teachers') || lowerQuery.includes('list of teachers')) {
-        return this.fetchAllFromCollection('TeacherInfo');
-    }
-
-    const keywords = this.extractKeywords(lowerQuery);
-    console.log(`[KBService.findRelevantInfo] Extracted keywords: ${JSON.stringify(keywords)}`);
-
-    if (keywords.length === 0) {
-        console.log('[KBService.findRelevantInfo] No relevant keywords extracted.');
-        console.timeEnd('KBService.findRelevantInfo_TotalTime');
-        return [];
-    }
-
-    const resultsPromises = this.validCollectionsToSearch.map(config =>
-        this.searchAndScore(config, keywords)
-    );
-
-    const allScoredResults = (await Promise.all(resultsPromises)).flat();
-    
-    // Trier TOUS les résultats de TOUTES les collections par score de pertinence
-    allScoredResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-    console.log(`[KBService.findRelevantInfo] Found ${allScoredResults.length} potential items. Top score: ${allScoredResults.length > 0 ? allScoredResults[0].relevanceScore : 'N/A'}`);
-    
-    const uniqueResults = this.deduplicateAndNormalizeResults(allScoredResults);
-    console.log(`[KBService.findRelevantInfo] Unique relevant info items prepared: ${uniqueResults.length}`);
-    console.timeEnd('KBService.findRelevantInfo_TotalTime');
-    return uniqueResults;
+    const keywords = this.extractKeywords(query.toLowerCase());
+    return this.findRelevantInfoWithKeywords(keywords);
   }
-  
-  // Dans src/services/knowledgeBaseService.js
 
-// Dans src/services/knowledgeBaseService.js
+  // ══════════════════════════════════════════════════════════════════════
+  // VECTOR SEARCH — in-memory cosine similarity
+  // Loads all docs with embeddings once, caches them, then scores
+  // ══════════════════════════════════════════════════════════════════════
+  async _vectorSearch(queryText, keywords = []) {
+    const queryVector = await embeddingService.embedText(queryText, 'search_query');
 
-// ... gardez le reste du fichier intact ...
+    // Load & cache all embedded docs on first call
+    const allDocs = await this._getDocCache();
+
+    if (allDocs.length === 0) {
+      throw new Error('No embedded documents found — run generate-embeddings.js first');
+    }
+
+    // Build a set of proper-noun keywords (capitalized, length > 3)
+    // Used to boost docs where these names appear explicitly
+    const nameKeywords = keywords
+      .filter(k => k.length > 3 && /[A-Z]/.test(k[0]))
+      .map(k => k.toLowerCase());
+
+    // Compute cosine similarity + optional name boost
+    const scored = allDocs
+      .map(doc => {
+        let sim = cosineSimilarity(queryVector, doc.embedding);
+        // Name boost: if a proper noun keyword appears in the doc's question or name, +0.08
+        if (nameKeywords.length > 0) {
+          const docText = ((doc.question || '') + ' ' + (doc.name || '')).toLowerCase();
+          const hasName = nameKeywords.some(n => docText.includes(n));
+          if (hasName) sim = Math.min(1, sim + 0.08);
+        }
+        return { ...doc, _vectorScore: sim };
+      })
+      .filter(doc => doc._vectorScore >= MIN_SIM_SCORE)
+      .sort((a, b) => b._vectorScore - a._vectorScore);
+
+    return this.deduplicateAndNormalizeResults(scored).slice(0, TOP_RESULTS);
+  }
+
+  // Load all docs from all collections that have embeddings
+  async _getDocCache() {
+    if (this._docCache) return this._docCache;
+
+    console.log('[KBService] Loading all embedded docs into memory cache...');
+    const start = Date.now();
+
+    const promises = this.validCollections.map(async col => {
+      try {
+        const docs = await col.model.find({ embedding: { $exists: true, $ne: null } }).lean();
+        return docs.map(d => ({ ...d, _collectionName: col.name }));
+      } catch {
+        return [];
+      }
+    });
+
+    const allDocs = (await Promise.all(promises)).flat();
+    this._docCache = allDocs;
+    console.log(`[KBService] Cache loaded: ${allDocs.length} embedded docs in ${Date.now() - start}ms`);
+    return allDocs;
+  }
+
+  // Invalidate cache (call when new docs are added)
+  invalidateCache() { this._docCache = null; }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // KEYWORD SEARCH — original fallback
+  // ══════════════════════════════════════════════════════════════════════
+  async _keywordSearch(keywords) {
+    const resultsPromises = this.validCollections.map(c => this.searchAndScore(c, keywords));
+    const allScoredResults = (await Promise.all(resultsPromises)).flat();
+    allScoredResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    return this.deduplicateAndNormalizeResults(allScoredResults);
+  }
 
   async searchAndScore(config, keywords) {
     try {
-        const regexPattern = keywords.join('|');
-        const query = {
-            $or: config.fields.map(field => ({
-                [field]: { $regex: regexPattern, $options: 'i' }
-            }))
-        };
-        
-        const candidates = await config.model.find(query).lean();
-
-        // SCORING AMÉLIORÉ
-        return candidates.map(doc => {
-            let relevanceScore = 0;
-            const questionText = (doc.question || '').toLowerCase();
-            const answerText = (doc.answer || '').toLowerCase();
-            const tagsText = (doc.tags || []).join(' ').toLowerCase();
-
-            keywords.forEach(keyword => {
-                // On donne des poids différents
-                if (questionText.includes(keyword)) {
-                    relevanceScore += 5; // Un mot dans la question est TRES pertinent
-                }
-                if (tagsText.includes(keyword)) {
-                    relevanceScore += 3; // Un mot dans les tags est pertinent
-                }
-                if (answerText.includes(keyword)) {
-                    relevanceScore += 1; // Un mot dans la réponse l'est moins
-                }
-            });
-            
-            return { ...doc, _collectionName: config.name, relevanceScore };
+      const expanded = keywords.flatMap(kw => {
+        const list = [kw], lkw = kw.toLowerCase();
+        if (lkw.endsWith('ies')) list.push(kw.slice(0,-3)+'y');
+        else if (lkw.endsWith('y')) list.push(kw.slice(0,-1)+'ies');
+        if (lkw.endsWith('s') && lkw.length>3) list.push(kw.slice(0,-1));
+        else if (lkw.length>3) list.push(kw+'s');
+        return list;
+      });
+      const unique = [...new Set(expanded)];
+      const pattern = unique.join('|');
+      const query = { $or: config.fields.map(f => ({ [f]: { $regex: pattern, $options: 'i' } })) };
+      const candidates = await config.model.find(query).lean();
+      return candidates.map(doc => {
+        let score = 0;
+        const q = (doc.question||'').toLowerCase();
+        const a = (doc.answer||'').toLowerCase();
+        const t = (doc.tags||[]).join(' ').toLowerCase();
+        unique.forEach(kw => {
+          if (q.includes(kw)) score += 5;
+          if (t.includes(kw)) score += 3;
+          if (a.includes(kw)) score += 1;
         });
-    } catch (error) {
-        console.error(`[KBService] Error scoring collection ${config.name}:`, error);
-        return [];
+        return { ...doc, _collectionName: config.name, relevanceScore: score };
+      });
+    } catch (err) {
+      console.error(`[KBService] Error in ${config.name}:`, err.message);
+      return [];
     }
   }
 
-// ... gardez le reste du fichier intact ...
-
+  // ══════════════════════════════════════════════════════════════════════
+  // UTILITIES
+  // ══════════════════════════════════════════════════════════════════════
   extractKeywords(query) {
-    const stopWords = new Set([
-        'a', 'about', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'how', 'i', 
-        'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'was', 'what', 'when',
-        'where', 'who', 'will', 'with', 'tell', 'me', 'school', 'find', 'can', 'show', 'list'
-    ]);
-    const tokens = query.toLowerCase().replace(/['’]/g, '').split(/[^a-z0-9]+/u)
-      .filter(word => word.length > 2 && !stopWords.has(word) && !/^\d+$/.test(word));
-    return [...new Set(tokens)];
+    const stop = new Set(['a','about','an','and','are','as','at','be','by','for','from',
+      'how','i','in','is','it','of','on','or','that','the','this','to','was','what',
+      'when','where','who','will','with','tell','me','school','find','can','show','list']);
+    return [...new Set(
+      query.replace(/['']/g,'').split(/[^a-z0-9]+/u)
+        .filter(w => w.length>2 && !stop.has(w) && !/^\d+$/.test(w))
+    )];
   }
 
-  // Fonctions utilitaires (pas de changement ici)
   async fetchAllFromCollection(collectionName) {
-    const config = this.collectionSearchConfig.find(c => c.name === collectionName);
-    if (!config) return [];
-    const allItems = await config.model.find({}).lean();
-    return this.deduplicateAndNormalizeResults(allItems.map(doc => ({...doc, _collectionName: config.name})));
+    const col = this.collectionSearchConfig.find(c => c.name === collectionName);
+    if (!col) return [];
+    const docs = await col.model.find({}).lean();
+    return this.deduplicateAndNormalizeResults(docs.map(d => ({ ...d, _collectionName: col.name })));
   }
 
   deduplicateAndNormalizeResults(results) {
-    const uniqueResultsMap = new Map();
-    results.forEach(current => {
-      const idField = current.id || (current._id ? current._id.toString() : null);
-      if (idField && !uniqueResultsMap.has(idField)) {
-        uniqueResultsMap.set(idField, {
-          id: idField,
-          name: current.name || null,
-          question: current.question || `Info: ${current.name || idField}`,
-          answer: current.answer || 'Details available.',
-          category: current.category || (current._collectionName ? collectionNameMap[current._collectionName] : 'General'),
-          tags: current.tags || [],
-          _collectionName: current._collectionName
+    const seen = new Map();
+    results.forEach(doc => {
+      const key = doc.id || (doc._id ? doc._id.toString() : null);
+      if (key && !seen.has(key)) {
+        seen.set(key, {
+          id:              key,
+          name:            doc.name || null,
+          question:        doc.question || `Info: ${doc.name || key}`,
+          answer:          doc.answer   || 'Details available.',
+          category:        doc.category || collectionNameMap[doc._collectionName] || 'General',
+          tags:            doc.tags     || [],
+          _collectionName: doc._collectionName,
+          relevanceScore:  doc.relevanceScore || 0,
+          _vectorScore:    doc._vectorScore   || 0,
         });
       }
     });
-    return Array.from(uniqueResultsMap.values());
+    return Array.from(seen.values());
   }
+}
+
+// ── Cosine similarity between two equal-length float arrays ──────────────────
+function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot   += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom === 0 ? 0 : dot / denom;
 }
 
 module.exports = new KnowledgeBaseService();
