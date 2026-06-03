@@ -85,22 +85,22 @@
         }
         
         .bot-avatar {
-            width: 44px;
-            height: 44px;
-            background: var(--bg-container);
-            border-radius: 50%;
+            width: auto;
+            height: 48px;
+            background: #ffffff;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            overflow: hidden; /* To ensure logo fits well */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            overflow: hidden;
+            padding: 5px 8px;
         }
         
         .bot-avatar img {
-            width: 100%;
-            height: auto; /* Maintain aspect ratio */
-            max-height: 100%;
-            object-fit: contain; /* Show whole logo */
+            height: 38px;
+            width: auto;
+            object-fit: contain;
         }
         
         .chat-header h1 {
@@ -364,7 +364,7 @@
         <div class="chat-header">
             <div class="chat-header-left">
                 <div class="bot-avatar">
-                    <img src="https://th.bing.com/th/id/R.34b61d440a4cb340b8ac856f3159c2b1?rik=IqpkMdAHYTE0sw&riu=http%3a%2f%2fnhsm.edu.dz%2fwp-content%2fuploads%2f2022%2f07%2fH-3.png&ehk=tVyn4%2bLOcMLQGraYhtztV6dwSULaZkj7vmdano74OxU%3d&risl=&pid=ImgRaw&r=0" alt="NHSM Logo">
+                    <img src="/nhsm-logo.png" alt="NHSM Logo" onerror="this.src='https://th.bing.com/th/id/R.34b61d440a4cb340b8ac856f3159c2b1?rik=IqpkMdAHYTE0sw&riu=http%3a%2f%2fnhsm.edu.dz%2fwp-content%2fuploads%2f2022%2f07%2fH-3.png&ehk=tVyn4%2bLOcMLQGraYhtztV6dwSULaZkj7vmdano74OxU%3d&risl=&pid=ImgRaw&r=0'">
                 </div>
                 <div>
                     <h1>NHSM Helper</h1>
