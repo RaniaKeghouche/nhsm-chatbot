@@ -169,44 +169,17 @@ Example 5: User Query: "شكون هو أحسن أستاذ في المدرسة" -
   async generateResponse(userQuery, context = []) {
     console.log(`[AIService] Generating final response with Groq for query: "${userQuery}". Context items: ${context.length}`);
     const detectedLang = this._detectQueryLanguage(userQuery);
-    let fullPrompt;
 
-    const SYSTEM_RULES = `You are NHSM Helper, a specialized and highly reliable assistant for students at NHSM (École Nationale Supérieure des Mathématiques, Algeria). You help with specialties, professors, study methods, resources, and student life.
-
-STRICT RULES — follow all of them without exception:
-1. LANGUAGE: The user wrote in ${detectedLang}. Respond ENTIRELY in ${detectedLang}. Never switch languages, even if the context is in another language. If the language is 'Algerian Derdja or Arabic', respond in Algerian Derdja (the everyday spoken Arabic of Algeria, NOT Modern Standard Arabic, NOT Egyptian Arabic).
-2. NO HALLUCINATION: Use ONLY the information from the provided context. Do NOT invent facts, add details from your general knowledge, or fill gaps with assumptions. If the context lacks information, say so clearly.
-3. OPINIONS AS OPINIONS: When the context contains student testimonials or personal opinions, present them explicitly as such (e.g., "According to students...", "Based on student feedback..."). Never state opinions as absolute facts.
-4. STRUCTURE: Use clear markdown formatting — **bold headers**, bullet points, numbered lists — for clarity and readability.
-5. COMPLETENESS: Cover all relevant points from the context. Acknowledge limitations honestly rather than inventing content.`;
-
-    if (context && context.length > 0) {
-        fullPrompt = `${SYSTEM_RULES}
-
---- CONTEXT ---
-${context.map(item => `## ${item.question || 'Information'}\n${item.answer}`).join('\n\n')}
---- END CONTEXT ---
-
-User Question: "${userQuery}"
-
-Answer in ${detectedLang}:`;
-    } else {
-        fullPrompt = `${SYSTEM_RULES}
-
-No relevant information was found in the knowledge base for this question. Politely inform the user in ${detectedLang} and suggest they ask about: NHSM specialties (SESA, CCS, MS), professors, study methods, or student life.
-
-User Question: "${userQuery}"
-
-Answer in ${detectedLang}:`;
-    }
+    const SYSTEM_RULES = this._buildSystemRules(detectedLang);
+    const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang);
 
     try {
       const answer = await makeGroqRequest(fullPrompt, GENERATE_MODEL, 0.1);
-      console.log('[AIService] Groq final response:', answer.substring(0, 150) + "...");
+      console.log('[AIService] Groq final response:', answer.substring(0, 150) + '...');
       return answer;
     } catch (error) {
-      console.error(`[AIService] Failed to generate final response.`, error);
-      return "I'm sorry, I encountered a technical problem while trying to generate a response.";
+      console.error('[AIService] Failed to generate final response.', error);
+      return "Je suis désolé, une erreur technique s'est produite. Veuillez réessayer.";
     }
   }
 
@@ -214,35 +187,8 @@ Answer in ${detectedLang}:`;
     console.log(`[AIService] Generating streaming response with Groq for query: "${userQuery}". Context items: ${context.length}`);
     const detectedLang = this._detectQueryLanguage(userQuery);
 
-    const SYSTEM_RULES = `You are NHSM Helper, a specialized and highly reliable assistant for students at NHSM (École Nationale Supérieure des Mathématiques, Algeria). You help with specialties, professors, study methods, resources, and student life.
-
-STRICT RULES — follow all of them without exception:
-1. LANGUAGE: The user wrote in ${detectedLang}. Respond ENTIRELY in ${detectedLang}. Never switch languages, even if the context is in another language.
-2. NO HALLUCINATION: Use ONLY the information from the provided context. Do NOT invent facts, add details from your general knowledge, or fill gaps with assumptions.
-3. OPINIONS AS OPINIONS: When the context contains student testimonials or personal opinions, present them explicitly as such (e.g., "According to students...", "Based on student feedback..."). Never state opinions as absolute facts.
-4. STRUCTURE: Use clear markdown formatting — bold headers, bullet points, numbered lists — to make the response easy to read, like a professional assistant.
-5. COMPLETENESS: Cover all relevant points from the context. If the context is insufficient to fully answer the question, clearly acknowledge the limitation instead of inventing content.`;
-
-    let fullPrompt;
-    if (context && context.length > 0) {
-        fullPrompt = `${SYSTEM_RULES}
-
---- CONTEXT ---
-${context.map(item => `## ${item.question || 'Information'}\n${item.answer}`).join('\n\n')}
---- END CONTEXT ---
-
-User Question: "${userQuery}"
-
-Answer in ${detectedLang}:`;
-    } else {
-        fullPrompt = `${SYSTEM_RULES}
-
-No relevant information was found in the knowledge base for this question. Politely inform the user in ${detectedLang} and suggest they ask about: NHSM specialties (SESA, CCS, MS), professors, study methods, or student life.
-
-User Question: "${userQuery}"
-
-Answer in ${detectedLang}:`;
-    }
+    const SYSTEM_RULES = this._buildSystemRules(detectedLang);
+    const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang);
 
     try {
       const stream = await makeGroqRequest(fullPrompt, GENERATE_MODEL, 0.1, true);

@@ -12,8 +12,19 @@ const collectionNameMap = {
   'Specialty': 'Specialty Information', 'StudentExperience': 'Student Experience', 'Humor': 'Humor Item'
 };
 
-const TOP_RESULTS    = 8;    // final context docs sent to AI
-const MIN_SIM_SCORE  = 0.38; // cosine similarity threshold — raised from 0.30 to filter noise
+const TOP_RESULTS       = 8;    // final context docs for normal queries
+const TOP_RESULTS_LIST  = 20;   // for "list all" queries — return more
+const MIN_SIM_SCORE     = 0.38; // cosine similarity threshold
+
+// Patterns that mean "give me ALL professors/teachers"
+const ALL_TEACHERS_PATTERNS = [
+  /list.*prof/i, /tous.*prof/i, /all.*prof/i, /all.*teach/i,
+  /liste.*prof/i, /liste.*enseignant/i, /qui sont les prof/i,
+  /who are the.*prof/i, /who are the.*teach/i,
+  /nombre.*prof/i, /combien.*prof/i, /how many.*prof/i,
+  /كل.*أستاذ/i, /قائمة.*أستاذ/i, /ليست.*أستاذ/i,
+  /all teachers/i, /list of teachers/i, /list of professors/i,
+];
 
 class KnowledgeBaseService {
   constructor() {
@@ -41,9 +52,18 @@ class KnowledgeBaseService {
   // ══════════════════════════════════════════════════════════════════════
   // PUBLIC: Main entry point
   // ══════════════════════════════════════════════════════════════════════
-  async findRelevantInfoWithKeywords(keywords = []) {
+  async findRelevantInfoWithKeywords(keywords = [], rawQuery = '') {
     if (keywords.length === 0) return [];
     console.time('KBService_TotalTime');
+
+    // ── Fast-path: "list all professors" queries ─────────────────────────────
+    const combined = (rawQuery + ' ' + keywords.join(' ')).toLowerCase();
+    if (ALL_TEACHERS_PATTERNS.some(p => p.test(combined))) {
+      console.log('[KBService] Detected "list all teachers" query — fetching all TeacherInfo docs');
+      const allTeachers = await this.fetchAllFromCollection('TeacherInfo');
+      console.timeEnd('KBService_TotalTime');
+      return allTeachers.slice(0, TOP_RESULTS_LIST);
+    }
 
     const queryText = keywords.join(' ');
     let results;

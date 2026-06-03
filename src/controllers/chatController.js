@@ -61,15 +61,16 @@ class ChatController {
       const keywordsString = await aiService.rewriteQueryForSearch(query);
       const keywords = keywordsString.split(',').map(kw => kw.trim()).filter(kw => kw.length > 0);
       
-      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords);
+      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, query);
       
-      // Use top KB results directly — skip AI re-scoring which causes good docs to be filtered out
+      // Use top KB results — expand limit for list-type queries
+      const contextLimit = candidateDocs.length > 10 ? 15 : MAX_SOURCES_TO_CLIENT;
       const finalContext = candidateDocs
         .filter(doc => {
           const ans = (doc.answer || '').toLowerCase();
           return !ans.startsWith('currently no available') && !ans.startsWith('no information');
         })
-        .slice(0, MAX_SOURCES_TO_CLIENT);
+        .slice(0, contextLimit);
       
       const sourcesForClient = finalContext.slice(0, MAX_SOURCES_TO_CLIENT).map(info => ({
         id: info.id || null,
@@ -129,15 +130,16 @@ class ChatController {
       const keywordsString = await aiService.rewriteQueryForSearch(query);
       const keywords = keywordsString.split(',').map(kw => kw.trim()).filter(kw => kw.length > 0);
       
-      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords);
+      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, query);
       
-      // Use top KB results directly — skip AI re-scoring which causes good docs to be filtered out
+      // Use top KB results directly — for list queries return more docs
+      const contextLimit = candidateDocs.length > 10 ? 15 : MAX_SOURCES_TO_CLIENT;
       const finalContext = candidateDocs
         .filter(doc => {
           const ans = (doc.answer || '').toLowerCase();
           return !ans.startsWith('currently no available') && !ans.startsWith('no information');
         })
-        .slice(0, MAX_SOURCES_TO_CLIENT);
+        .slice(0, contextLimit);
       
       const aiAnswer = await aiService.generateResponse(query, finalContext);
       
