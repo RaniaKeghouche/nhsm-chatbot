@@ -58,10 +58,14 @@ class ChatController {
         return res.end();
       }
 
+      console.log('[ChatController] Rewriting query for keywords...');
       const keywordsString = await aiService.rewriteQueryForSearch(query);
       const keywords = keywordsString.split(',').map(kw => kw.trim()).filter(kw => kw.length > 0);
+      console.log(`[ChatController] Keywords extracted: ${keywords.join(', ')}`);
       
+      console.log('[ChatController] Searching knowledge base...');
       const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, query);
+      console.log(`[ChatController] Found ${candidateDocs.length} candidate documents`);
       
       // Use top KB results — expand limit for list-type queries
       const contextLimit = candidateDocs.length > 10 ? 15 : MAX_SOURCES_TO_CLIENT;
@@ -71,6 +75,8 @@ class ChatController {
           return !ans.startsWith('currently no available') && !ans.startsWith('no information');
         })
         .slice(0, contextLimit);
+      
+      console.log(`[ChatController] Final context: ${finalContext.length} documents for AI`);
       
       const sourcesForClient = finalContext.slice(0, MAX_SOURCES_TO_CLIENT).map(info => ({
         id: info.id || null,
@@ -90,20 +96,26 @@ class ChatController {
       res.write(`SOURCES:${JSON.stringify(sourcesForClient)}\n\n`);
       
       // Stream de la réponse
+      console.log('[ChatController] Starting Groq streaming...');
       const stream = await aiService.generateResponseStream(query, finalContext);
+      console.log('[ChatController] Groq stream received, iterating...');
       
+      let chunkCount = 0;
       for await (const chunk of stream) {
         if (chunk.choices?.[0]?.delta?.content) {
           res.write(chunk.choices[0].delta.content);
+          chunkCount++;
         }
       }
       
+      console.log(`[ChatController] Stream completed. Chunks received: ${chunkCount}`);
       const processingTime = Date.now() - startTime;
       res.write(`\n\nPROCESSING_TIME:${processingTime}ms`);
       res.end();
       
     } catch (error) {
-      console.error('[ChatController] Streaming error:', error);
+      console.error('[ChatController] Streaming error:', error.message);
+      console.error('[ChatController] Error stack:', error.stack);
       if (!res.headersSent) {
         next(error);
       } else {
@@ -166,4 +178,4 @@ class ChatController {
   }
 }
 
-module.exports = new ChatController();
+module.exports = new ChatController();

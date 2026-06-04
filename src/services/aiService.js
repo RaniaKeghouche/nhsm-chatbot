@@ -15,6 +15,7 @@ async function makeGroqRequest(prompt, model, temperature, stream = false) {
   const groq = new Groq({ apiKey: config.groqApiKey });
 
   try {
+    console.log(`[AIService] Making Groq request: model=${model}, temperature=${temperature}, stream=${stream}, promptLength=${prompt.length}`);
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: model,
@@ -23,12 +24,16 @@ async function makeGroqRequest(prompt, model, temperature, stream = false) {
     });
 
     if (stream) {
+      console.log(`[AIService] Groq stream created successfully`);
       return chatCompletion;
     }
 
-    return chatCompletion.choices[0]?.message?.content || '';
+    const content = chatCompletion.choices[0]?.message?.content || '';
+    console.log(`[AIService] Groq response received: ${content.substring(0, 100)}...`);
+    return content;
   } catch (error) {
     console.error(`[AIService] Groq API call failed for model ${model}:`, error.message);
+    console.error(`[AIService] Error details:`, error);
     throw error;
   }
 }
@@ -166,6 +171,70 @@ Example 5: User Query: "شكون هو أحسن أستاذ في المدرسة" -
     return 'the same language as the question';
   }
 
+  _buildSystemRules(detectedLang) {
+    const isFrench = detectedLang.toLowerCase().includes('french');
+    const isArabic = detectedLang.toLowerCase().includes('arabic') || detectedLang.toLowerCase().includes('derdja');
+
+    if (isArabic) {
+      return `أنت مساعد ذكي متخصص في الإجابة عن أسئلة طلاب المدرسة الوطنية العليا للرياضيات (NHSM).
+المبادئ التوجيهية:
+1. أجب بشكل واضح ومختصر وودود
+2. استخدم المعلومات المقدمة فقط
+3. إذا كانت المعلومات غير متوفرة، قل ذلك بصراحة
+4. تجنب الرد على أسئلة غير المتعلقة بـ NHSM
+5. أجب باللغة العربية`;
+    }
+
+    if (isFrench) {
+      return `Tu es un assistant intelligent spécialisé pour répondre aux questions des étudiants de l'Ecole Nationale Supérieure de Mathématiques (NHSM).
+Directives:
+1. Réponds de manière claire, concise et amicale
+2. Utilise uniquement les informations fournies
+3. Si les informations ne sont pas disponibles, dis-le franchement
+4. Évite de répondre à des questions non liées à l'NHSM
+5. Réponds en français`;
+    }
+
+    return `You are an intelligent assistant specialized in answering questions from students of the National School of Advanced Mathematics (NHSM).
+Guidelines:
+1. Answer clearly, concisely, and in a friendly manner
+2. Use only the information provided
+3. If information is not available, say so frankly
+4. Avoid answering questions unrelated to NHSM
+5. Respond in English`;
+  }
+
+  _buildPrompt(systemRules, userQuery, context = [], detectedLang) {
+    const contextText = context
+      .map((doc, idx) => {
+        const question = doc.question || 'Information';
+        const answer = doc.answer || 'No details available';
+        return `[Source ${idx + 1}]\nQ: ${question}\nA: ${answer}`;
+      })
+      .join('\n\n');
+
+    const isFrench = detectedLang.toLowerCase().includes('french');
+    const isArabic = detectedLang.toLowerCase().includes('arabic') || detectedLang.toLowerCase().includes('derdja');
+
+    let instruction = 'Answer the user\'s question based on the context provided above.';
+    if (isFrench) {
+      instruction = 'Répondez à la question de l\'utilisateur en vous basant sur le contexte fourni ci-dessus.';
+    } else if (isArabic) {
+      instruction = 'أجب على سؤال المستخدم بناءً على السياق المقدم أعلاه.';
+    }
+
+    return `${systemRules}
+
+CONTEXT INFORMATION:
+${contextText || '(No relevant information found)'}
+
+${instruction}
+
+USER QUESTION: ${userQuery}
+
+RESPONSE:`;
+  }
+
   async generateResponse(userQuery, context = []) {
     console.log(`[AIService] Generating final response with Groq for query: "${userQuery}". Context items: ${context.length}`);
     const detectedLang = this._detectQueryLanguage(userQuery);
@@ -185,16 +254,22 @@ Example 5: User Query: "شكون هو أحسن أستاذ في المدرسة" -
 
   async generateResponseStream(userQuery, context = []) {
     console.log(`[AIService] Generating streaming response with Groq for query: "${userQuery}". Context items: ${context.length}`);
-    const detectedLang = this._detectQueryLanguage(userQuery);
-
-    const SYSTEM_RULES = this._buildSystemRules(detectedLang);
-    const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang);
-
+    
     try {
+      const detectedLang = this._detectQueryLanguage(userQuery);
+      console.log(`[AIService] Detected language: ${detectedLang}`);
+
+      const SYSTEM_RULES = this._buildSystemRules(detectedLang);
+      console.log(`[AIService] System rules built. Length: ${SYSTEM_RULES.length}`);
+      
+      const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang);
+      console.log(`[AIService] Full prompt built. Length: ${fullPrompt.length}`);
+
       const stream = await makeGroqRequest(fullPrompt, GENERATE_MODEL, 0.1, true);
       return stream;
     } catch (error) {
-      console.error(`[AIService] Failed to generate streaming response.`, error);
+      console.error(`[AIService] Failed to generate streaming response:`, error.message);
+      console.error(`[AIService] Error details:`, error);
       throw error;
     }
   }
