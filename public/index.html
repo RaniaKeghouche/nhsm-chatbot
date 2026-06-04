@@ -400,8 +400,15 @@
         const chatBody = document.getElementById('chatBody');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.querySelector('.send-button');
-        const API_ENDPOINT_STREAM = '/api/query-stream';
-        const API_ENDPOINT = '/api/query';
+
+        // Dynamic API base: relative on Render backend, absolute on Netlify/other static hosts
+        const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? ''
+            : 'https://nhsm-chatbot-api.onrender.com';
+
+        const API_ENDPOINT_STREAM = BACKEND_URL + '/api/query-stream';
+        const API_ENDPOINT        = BACKEND_URL + '/api/query';
+
 
         let isProcessing = false; // Protection contre questions multiples
 
