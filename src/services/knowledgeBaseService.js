@@ -32,6 +32,26 @@ const CACHE_TTL_MS      = 10 * 60 * 1000; // rechargement auto du cache toutes l
 // portant sur les spécialités.
 const RERANK_MIN_CONFIDENCE = 0.05;
 
+// ⚠️ NE PAS filtrer sur le score de rerank pour décider qu'« aucun document
+// n'est pertinent ». Tenté puis ABANDONNÉ, mesures à l'appui :
+//
+//   « وش هوما تخصصات لي كاينين ف ليكول »  (question LÉGITIME) → 0.000424
+//   « recette de tarte aux pommes »        (HORS-SUJET)        → 0.006539
+//
+// Une vraie question d'étudiant en derdja score 15× plus bas qu'une recette de
+// cuisine : les distributions se chevauchent, aucun seuil ne les sépare. Un
+// premier essai à 0.008 (calibré sur un échantillon de 14 questions dont
+// seulement 2 en derdja) a fait chuter le test SP-09 de 80/100 à 45/100 — le
+// chatbot répondait « je n'ai pas cette information » sur les spécialités,
+// alors que les documents étaient bien là.
+//
+// Le reranker Cohere est utilisable pour ORDONNER, pas pour juger de la
+// pertinence absolue en arabe dialectal. Une piste plus solide serait la
+// similarité cosinus du vecteur (le modèle d'embedding, lui, gère bien le
+// derdja — c'est la recherche vectorielle qui trouve les bons documents),
+// mais elle demande une calibration sur un échantillon nettement plus large
+// et majoritairement en derdja.
+
 // Patterns that mean "give me ALL professors/teachers"
 const ALL_TEACHERS_PATTERNS = [
   /list.*prof/i, /tous.*prof/i, /all.*prof/i, /all.*teach/i,

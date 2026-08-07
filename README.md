@@ -92,8 +92,37 @@ After a reindex the server picks up new vectors **on its own** within 10 minutes
 
 ## Evaluation
 
-`eval-chatbot.js` and the scripts in `scripts/` measure answer quality against a
-test set and generate an HTML report, which helped tune the retrieval step.
+`eval-chatbot.js` scores 43 questions across all nine collections on six
+metrics. Latest run — 43/43 played, **94/100**, 37 A, 5 B, 1 C, **0 failures**:
+
+| Metric | Score |
+|--------|-------|
+| DB Retrieval | 18.6/20 (93%) |
+| Source Quality | 18.0/20 (90%) |
+| Language Match | 15.0/15 (100%) |
+| Completeness | 14.9/15 (99%) |
+| Anti-hallucination | 15.0/15 (100%) |
+| Relevance | 12.6/15 (84%) |
+
+The three retrieval misses are known: one targets `MathTip`, whose collection is
+empty, and two reach a neighbouring collection holding equivalent content
+(pomodoro also lives in `wellnesses`, online resources also in `studytips`).
+
+The suite paces itself at 25s per test to stay under the Groq free tier's 6000
+tokens/minute, retries on quota errors and **excludes** quota-blocked tests from
+the average — scoring them zero would measure the rate limit rather than answer
+quality. Override with `EVAL_DELAY_MS` on a paid tier.
+
+### A note on relevance gating
+
+Do not gate retrieval on the rerank score. Measured on this corpus, a legitimate
+Derdja question (« وش هوما تخصصات لي كاينين ف ليكول ») scores **0.0004** while an
+off-topic French one (apple pie recipe) scores **0.0065** — the distributions
+overlap, and a 0.008 threshold dropped a real test from 80/100 to 45/100. Cohere's
+reranker orders results well but cannot judge absolute relevance in Algerian
+Derdja. Cosine similarity separates the same sample correctly (off-topic peaks at
+0.49, relevant bottoms at 0.55) but by only 12%, which is too thin to deploy
+without a much larger, Derdja-heavy calibration set.
 
 ## Project structure
 

@@ -435,13 +435,23 @@ function scoreTest(tc, keywords, candidates, finalContext, answer) {
     `${d.id || ''} ${d.category || ''} ${d.question || ''} ${(d.tags || []).join(' ')}`
   )).toLowerCase();
 
-  // 1. DB Retrieval (20 pts) — did ANY expected collection appear?
+  // 1. DB Retrieval (20 pts) — la bonne collection a-t-elle été atteinte ?
+  //
+  // ⚠️ Cette métrique cherchait le nom de collection dans `id + category +
+  // question + tags`. Or `category` est le champ métier du document
+  // ("NHSM Faculty", "Study Techniques"...), jamais le nom technique. Toute
+  // collection dont le libellé diffère de son nom interne — TeacherInfo,
+  // StudyTip, GeneralFAQ, MathTip, StudentExperience — marquait donc 0/20
+  // même quand la recherche était parfaite. 22 tests sur 43 étaient concernés
+  // et la métrique plafonnait artificiellement à 49 %.
+  //
+  // On compare maintenant au vrai `_collectionName`, que le service attache
+  // à chaque document dans deduplicateAndNormalizeResults().
   if (tc.expectedCollections.length === 0) {
     scores.retrieval = 20; // Edge case — no expected collection
   } else {
-    const found = tc.expectedCollections.some(col =>
-      sourcesStr.includes(col.toLowerCase())
-    );
+    const reached = new Set(finalContext.map(d => d._collectionName).filter(Boolean));
+    const found = tc.expectedCollections.some(col => reached.has(col));
     scores.retrieval = found ? 20 : 0;
   }
 
@@ -504,7 +514,13 @@ function scoreTest(tc, keywords, candidates, finalContext, answer) {
 // ─────────────────────────────────────────────────────────────
 // Run one test
 // ─────────────────────────────────────────────────────────────
-async function runTest(tc) {
+// Un test bloqué par le quota Groq n'est PAS un mauvais test : sans cette
+// distinction il était noté 0/100 grade F, et le score global mesurait le
+// rate limiting au lieu de la qualité des réponses.
+const isRateLimit = (err) =>
+  err?.status === 429 || err?.isRateLimit || /rate.?limit|429/i.test(err?.message || '');
+
+async function runTest(tc, attempt = 0) {
   const result = { id: tc.id, category: tc.category, query: tc.query, error: null };
 
   try {
@@ -539,10 +555,19 @@ async function runTest(tc) {
     result.total       = total;
     result.grade       = total >= 85 ? 'A' : total >= 70 ? 'B' : total >= 50 ? 'C' : 'F';
   } catch (err) {
-    result.error  = err.message;
-    result.total  = 0;
-    result.grade  = 'F';
-    result.scores = {};
+    // Quota atteint → on attend et on rejoue le test au lieu de le noter 0.
+    if (isRateLimit(err) && attempt < 4) {
+      const wait = 30000 * (attempt + 1);
+      process.stdout.write(`${C.yellow}[quota, attente ${wait / 1000}s]${C.reset} `);
+      await new Promise(r => setTimeout(r, wait));
+      return runTest(tc, attempt + 1);
+    }
+
+    result.error       = err.message;
+    result.rateLimited = isRateLimit(err);
+    result.total       = 0;
+    result.grade       = result.rateLimited ? '—' : 'F';
+    result.scores      = {};
   }
 
   return result;
@@ -585,17 +610,34 @@ async function main() {
   const results = [];
   const categoryScores = {};
 
-  for (const tc of TEST_CASES) {
-    process.stdout.write(`  Running ${C.bold}${tc.id}${C.reset} ${tc.query.substring(0,40)}... `);
+  // Cadence : chaque test coûte ~3000 tokens (réécriture + génération) et le
+  // palier gratuit Groq plafonne à 6000 tokens/minute. Sans pause, la suite
+  // partait en 429 dès le 3e test.
+  const INTER_TEST_MS = parseInt(process.env.EVAL_DELAY_MS, 10) || 25000;
+  console.log(`${C.dim}  Cadence : ${INTER_TEST_MS / 1000}s entre chaque test (quota Groq 6000 tok/min)`);
+  console.log(`  Durée estimée : ~${Math.ceil(TEST_CASES.length * INTER_TEST_MS / 60000)} min${C.reset}\n`);
+
+  for (const [i, tc] of TEST_CASES.entries()) {
+    process.stdout.write(`  [${i + 1}/${TEST_CASES.length}] ${C.bold}${tc.id}${C.reset} ${tc.query.substring(0,40)}... `);
     const r = await runTest(tc);
     results.push(r);
     const gradeColor = r.grade === 'A' ? C.green : r.grade === 'B' ? C.cyan :
-                       r.grade === 'C' ? C.yellow : C.red;
+                       r.grade === 'C' ? C.yellow : r.grade === '—' ? C.dim : C.red;
     console.log(`${gradeColor}${r.grade} (${r.total}/100)${C.reset}`);
 
-    // Accumulate per-category
-    if (!categoryScores[r.category]) categoryScores[r.category] = [];
-    categoryScores[r.category].push(r.total);
+    // Un test bloqué par le quota ne compte pas dans la moyenne : l'inclure
+    // ferait passer un problème d'infrastructure pour un défaut de qualité.
+    if (!r.rateLimited) {
+      if (!categoryScores[r.category]) categoryScores[r.category] = [];
+      categoryScores[r.category].push(r.total);
+    }
+
+    if (i < TEST_CASES.length - 1) await new Promise(x => setTimeout(x, INTER_TEST_MS));
+  }
+
+  const skipped = results.filter(r => r.rateLimited).length;
+  if (skipped > 0) {
+    console.log(`\n${C.yellow}⚠️  ${skipped} test(s) abandonnés sur quota — EXCLUS de la moyenne.${C.reset}`);
   }
 
   await mongoose.disconnect();
@@ -626,16 +668,20 @@ async function main() {
   });
 
   // ── Overall summary
-  const totalScore   = results.reduce((a, r) => a + r.total, 0);
-  const avgScore     = Math.round(totalScore / results.length);
+  // On ne moyenne que les tests RÉELLEMENT joués : inclure ceux abandonnés sur
+  // quota reviendrait à noter la qualité du chatbot avec des zéros
+  // d'infrastructure.
+  const scored       = results.filter(r => !r.rateLimited);
+  const totalScore   = scored.reduce((a, r) => a + r.total, 0);
+  const avgScore     = scored.length ? Math.round(totalScore / scored.length) : 0;
   const grades       = { A: 0, B: 0, C: 0, F: 0 };
-  results.forEach(r => grades[r.grade]++);
+  scored.forEach(r => { if (grades[r.grade] !== undefined) grades[r.grade]++; });
   const overallGradeColor = avgScore >= 85 ? C.green : avgScore >= 70 ? C.cyan : avgScore >= 50 ? C.yellow : C.red;
 
   console.log(`\n${C.bold}${C.cyan}╔═══════════════════════════════════════════════════════╗`);
   console.log(`║   OVERALL EVALUATION SUMMARY                          ║`);
   console.log(`╚═══════════════════════════════════════════════════════╝${C.reset}`);
-  console.log(`  Total tests : ${results.length}`);
+  console.log(`  Total tests : ${scored.length} joués${skipped ? ` (${skipped} abandonnés sur quota, exclus)` : ''}`);
   console.log(`  Avg score   : ${overallGradeColor}${C.bold}${avgScore}/100${C.reset}  ${bar(avgScore)}`);
   console.log(`  ${C.green}A (≥85)${C.reset}: ${grades.A}  ${C.cyan}B (≥70)${C.reset}: ${grades.B}  ${C.yellow}C (≥50)${C.reset}: ${grades.C}  ${C.red}F (<50)${C.reset}: ${grades.F}`);
   console.log(`\n  Failed tests:`);
