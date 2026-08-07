@@ -38,31 +38,52 @@ const mongoLogURI = config.mongoURI.includes('@')
   : config.mongoURI;
 console.log(`Attempting to connect to MongoDB at ${mongoLogURI}`);
 
-// Connexion MongoDB avec gestion d'erreur améliorée
 let server;
 
-mongoose.connect(config.mongoURI)
-.then(() => {
-  console.log('✅ MongoDB connecté avec succès.');
+// Connexion MongoDB avec tentatives échelonnées.
+// ⚠️ Auparavant, un seul échec suffisait à faire process.exit(1) — et donc à
+// faire ÉCHOUER le déploiement Render. Un cluster Atlas en veille met plusieurs
+// dizaines de secondes à se réveiller : c'est ce qui a fait tomber le déploiement
+// du 17/07/2026. On réessaie avant d'abandonner.
+const MAX_DB_ATTEMPTS = 5;
+const RETRY_DELAY_MS  = 5000;
 
-  // Lancer le serveur seulement après une connexion MongoDB réussie
-  server = app.listen(PORT, () => {
-    console.log(`🚀 Serveur NHSM Helper lancé sur http://localhost:${PORT}`);
-    console.log(`💬 Accéder au chat sur http://localhost:${PORT}/`);
-    console.log(`🔗 API endpoint: POST http://localhost:${PORT}/api/query`);
-    console.log(`📡 Streaming endpoint: POST http://localhost:${PORT}/api/query-stream`);
-    console.log(`Environment: ${config.nodeEnv}`);
+async function connectWithRetry() {
+  for (let attempt = 1; attempt <= MAX_DB_ATTEMPTS; attempt++) {
+    try {
+      await mongoose.connect(config.mongoURI, { serverSelectionTimeoutMS: 15000 });
+      console.log('✅ MongoDB connecté avec succès.');
+      return;
+    } catch (err) {
+      const last = attempt === MAX_DB_ATTEMPTS;
+      console.error(`❌ MongoDB tentative ${attempt}/${MAX_DB_ATTEMPTS} échouée: ${err.message}`);
+      if (last) throw err;
+      console.log(`   Nouvelle tentative dans ${RETRY_DELAY_MS / 1000}s...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
+}
 
-    // Préchauffage du cache vectoriel EN ARRIÈRE-PLAN : le port est déjà
-    // ouvert, donc Render voit le service en ligne pendant le chargement.
-    knowledgeBaseService.warmUp();
+connectWithRetry()
+  .then(() => {
+    server = app.listen(PORT, () => {
+      console.log(`🚀 Serveur NHSM Helper lancé sur http://localhost:${PORT}`);
+      console.log(`💬 Accéder au chat sur http://localhost:${PORT}/`);
+      console.log(`🔗 API endpoint: POST http://localhost:${PORT}/api/query`);
+      console.log(`📡 Streaming endpoint: POST http://localhost:${PORT}/api/query-stream`);
+      console.log(`Environment: ${config.nodeEnv}`);
+
+      // Préchauffage du cache vectoriel EN ARRIÈRE-PLAN : le port est déjà
+      // ouvert, donc Render voit le service en ligne pendant le chargement.
+      knowledgeBaseService.warmUp();
+    });
+  })
+  .catch((err) => {
+    console.error('❌ Connexion MongoDB impossible après plusieurs tentatives:', err.message);
+    console.error('Vérifiez que le cluster Atlas est actif et que MONGO_URI est correct.');
+    console.error('Si le cluster était en pause, il peut mettre ~1 min à démarrer — relancez le déploiement.');
+    process.exit(1);
   });
-})
-.catch((err) => {
-  console.error('❌ Erreur de connexion MongoDB:', err.message);
-  console.error('Vérifiez que MongoDB est en cours d\'exécution et que MONGO_URI est correct.');
-  process.exit(1);
-});
 
 // Arrêt propre.
 // ⚠️ Render (comme Docker/Kubernetes) envoie SIGTERM, pas SIGINT : seul
