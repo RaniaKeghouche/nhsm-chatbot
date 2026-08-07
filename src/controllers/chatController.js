@@ -5,15 +5,21 @@ const knowledgeBaseService = require('../services/knowledgeBaseService');
 const MAX_SOURCES_TO_CLIENT = 5;
 
 // En-têtes de la réponse en flux.
-// `X-Accel-Buffering: no` est le point CRITIQUE en production : le proxy de
-// Render met les réponses en tampon par défaut et ne les relâche qu'une fois
-// terminées. Mesuré : 62 morceaux en local contre 2 en production, premier
+//
+// `text/event-stream` est le point CRITIQUE en production, et il n'est pas
+// cosmétique : Render sert ses services derrière Cloudflare, qui met en tampon
+// les réponses `text/plain` et ne les relâche qu'une fois terminées. Mesuré sur
+// la même question : 62 morceaux en local contre 2 à travers Render, premier
 // octet à 1,8 s contre 8,9 s — l'étudiant fixait un écran figé puis recevait
-// tout d'un coup. Les proxys de la famille nginx respectent cet en-tête pour
-// désactiver la mise en tampon et laisser passer le flux tel quel.
+// tout d'un coup, et l'endpoint streaming n'apportait donc rien.
+// Cloudflare laisse passer `text/event-stream` sans tampon : c'est le TYPE DE
+// CONTENU qui décide, pas `X-Accel-Buffering` (que le proxy supprime au
+// passage — vérifié, il n'arrive jamais au client).
+//
+// Le client lit les octets bruts via response.body.getReader() et ne se sert
+// pas d'EventSource : le format du corps reste inchangé, seul l'en-tête bascule.
 const STREAM_HEADERS = {
-  'Content-Type': 'text/plain; charset=utf-8',
-  'Transfer-Encoding': 'chunked',
+  'Content-Type': 'text/event-stream; charset=utf-8',
   'Cache-Control': 'no-cache, no-transform',
   'Connection': 'keep-alive',
   'X-Accel-Buffering': 'no',
