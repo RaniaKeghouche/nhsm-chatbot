@@ -25,12 +25,19 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Erreur par défaut
-  res.status(err.status || 500).json({
+  // Erreur par défaut.
+  // On ne masque que les 5xx : ce sont eux qui peuvent laisser fuiter une URI
+  // Mongo, un chemin de fichier ou une trace interne. Les 4xx sont des refus
+  // VOULUS (origine non autorisée, quota, message trop long) : les remplacer
+  // par « erreur interne » afficherait un mensonge à l'utilisateur et rendrait
+  // le diagnostic impossible en production.
+  const status = err.status || 500;
+  const isClientError = status >= 400 && status < 500;
+  const hideDetails = !isClientError && process.env.NODE_ENV === 'production';
+
+  res.status(status).json({
     success: false,
-    message: process.env.NODE_ENV === 'production' 
-      ? 'Une erreur interne est survenue.' 
-      : err.message
+    message: hideDetails ? 'Une erreur interne est survenue.' : err.message
   });
 };
 
