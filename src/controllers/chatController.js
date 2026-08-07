@@ -4,6 +4,21 @@ const knowledgeBaseService = require('../services/knowledgeBaseService');
 
 const MAX_SOURCES_TO_CLIENT = 5;
 
+// En-têtes de la réponse en flux.
+// `X-Accel-Buffering: no` est le point CRITIQUE en production : le proxy de
+// Render met les réponses en tampon par défaut et ne les relâche qu'une fois
+// terminées. Mesuré : 62 morceaux en local contre 2 en production, premier
+// octet à 1,8 s contre 8,9 s — l'étudiant fixait un écran figé puis recevait
+// tout d'un coup. Les proxys de la famille nginx respectent cet en-tête pour
+// désactiver la mise en tampon et laisser passer le flux tel quel.
+const STREAM_HEADERS = {
+  'Content-Type': 'text/plain; charset=utf-8',
+  'Transfer-Encoding': 'chunked',
+  'Cache-Control': 'no-cache, no-transform',
+  'Connection': 'keep-alive',
+  'X-Accel-Buffering': 'no',
+};
+
 // ── Greetings & social phrases that need NO DB lookup ──────────────────────
 const GREETING_PATTERNS = [
   /^(hi+|hey+|hello+|salut+|bonjour+|bonsoir+|salam+|السلام|مرحبا|اهلا|آهلاً|coucou|yo+|wesh+|wsh|ola|hola|slt|bjr|cc)[\s!?.]*$/i,
@@ -65,7 +80,7 @@ class ChatController {
       // ── Fast-path: greetings bypass DB entirely ─────────────────────────
       if (isGreeting(query)) {
         const reply = greetingResponse(query);
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+        res.writeHead(200, STREAM_HEADERS);
         res.write('SOURCES:[]\n\n');
         res.write(reply);
         res.write(`\n\nPROCESSING_TIME:1ms`);
@@ -102,12 +117,7 @@ class ChatController {
       }));
 
       // Configuration du streaming
-      res.writeHead(200, {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      });
+      res.writeHead(200, STREAM_HEADERS);
 
       // Envoyer les sources d'abord
       res.write(`SOURCES:${JSON.stringify(sourcesForClient)}\n\n`);
