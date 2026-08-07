@@ -1,9 +1,11 @@
 // src/services/knowledgeBaseService.js
-// Vector search via in-memory cosine similarity (works on any Atlas tier)
-// Falls back to keyword search if embeddings are not available
+// RECHERCHE HYBRIDE : vecteur (sémantique) + mots-clés (lexical),
+// fusionnés par Reciprocal Rank Fusion (RRF), puis re-classés par
+// Cohere Rerank (cross-encoder). Fallback gracieux à chaque étage.
 
 const { MathTip, GeneralFAQ, Resource, Wellness, StudyTip, TeacherInfo, Specialty, StudentExperience, Humor } = require('../models');
 const embeddingService = require('./embeddingService');
+const rerankService = require('./rerankService');
 const config = require('../config/config');
 
 const collectionNameMap = {
@@ -14,7 +16,21 @@ const collectionNameMap = {
 
 const TOP_RESULTS       = 8;    // final context docs for normal queries
 const TOP_RESULTS_LIST  = 20;   // for "list all" queries — return more
-const MIN_SIM_SCORE     = 0.38; // cosine similarity threshold
+const VECTOR_POOL       = 15;   // candidats gardés par la recherche vectorielle
+const KEYWORD_POOL      = 15;   // candidats gardés par la recherche mots-clés
+const RERANK_POOL       = 15;   // candidats envoyés au reranker
+const MIN_SIM_FLOOR     = 0.30; // plancher absolu de similarité cosinus
+const REL_SIM_DELTA     = 0.14; // seuil RELATIF : on garde ce qui est proche du meilleur
+const RRF_K             = 60;   // constante standard de Reciprocal Rank Fusion
+const CACHE_TTL_MS      = 10 * 60 * 1000; // rechargement auto du cache toutes les 10 min
+
+// En dessous de ce score, le reranker n'a AUCUN signal exploitable : ses
+// résultats ne sont plus que du bruit et on garde l'ordre RRF, qui combine
+// au moins des preuves lexicales ET sémantiques.
+// Observé en conditions réelles : une question en derdja donnait un top score
+// de 0.024 et le reranker remontait une fiche professeur pour une question
+// portant sur les spécialités.
+const RERANK_MIN_CONFIDENCE = 0.05;
 
 // Patterns that mean "give me ALL professors/teachers"
 const ALL_TEACHERS_PATTERNS = [
@@ -43,9 +59,10 @@ class KnowledgeBaseService {
     this.validCollections = this.collectionSearchConfig.filter(
       c => c.model && typeof c.model.find === 'function'
     );
-    // In-memory cache of all docs with embeddings (loaded once on first search)
-    this._docCache     = null;
-    this._cacheLoading = false;
+    // Cache mémoire des docs embedés (chargé au premier search, rafraîchi par TTL)
+    this._docCache      = null;
+    this._cacheLoadedAt = 0;
+    this._cacheLoading  = null; // promesse partagée pendant le chargement
     console.log(`[KBService] Ready. Collections: ${this.validCollections.length}`);
   }
 
@@ -53,51 +70,127 @@ class KnowledgeBaseService {
   // PUBLIC: Main entry point
   // ══════════════════════════════════════════════════════════════════════
   async findRelevantInfoWithKeywords(keywords = [], rawQuery = '') {
-    if (keywords.length === 0) return [];
-    console.time('KBService_TotalTime');
+    if (keywords.length === 0 && !rawQuery.trim()) return [];
+    // Chrono manuel plutôt que console.time : avec un label fixe, deux requêtes
+    // simultanées déclenchent « Label already exists » et faussent la mesure.
+    const startedAt = Date.now();
+    const elapsed = () => `${Date.now() - startedAt}ms`;
 
     // ── Fast-path: "list all professors" queries ─────────────────────────────
     const combined = (rawQuery + ' ' + keywords.join(' ')).toLowerCase();
     if (ALL_TEACHERS_PATTERNS.some(p => p.test(combined))) {
       console.log('[KBService] Detected "list all teachers" query — fetching all TeacherInfo docs');
       const allTeachers = await this.fetchAllFromCollection('TeacherInfo');
-      console.timeEnd('KBService_TotalTime');
+      console.log(`[KBService] Total: ${elapsed()}`);
       return allTeachers.slice(0, TOP_RESULTS_LIST);
     }
 
-    const queryText = keywords.join(' ');
-    let results;
+    // ── #1 : on embed la VRAIE question (le sens complet), pas les mots-clés.
+    // Les mots-clés ne servent plus qu'à la recherche lexicale + name-boost.
+    const searchText = (rawQuery && rawQuery.trim()) || keywords.join(' ');
 
-    if (config.cohereApiKey) {
+    // ── #3 : recherche HYBRIDE — vecteur et mots-clés en parallèle ──────────
+    const [vectorResults, keywordResults] = await Promise.all([
+      this._safeVectorSearch(searchText),
+      this._keywordSearch(keywords),
+    ]);
+
+    console.log(`[KBService] Hybrid: ${vectorResults.length} vector + ${keywordResults.length} keyword results`);
+
+    let candidates;
+    if (vectorResults.length === 0) {
+      // Pas de vecteurs disponibles → comportement historique (mots-clés seuls)
+      candidates = keywordResults;
+    } else if (keywordResults.length === 0) {
+      candidates = vectorResults;
+    } else {
+      // Fusion RRF : combine les deux classements sans dépendre des échelles de score
+      candidates = this._reciprocalRankFusion(vectorResults, keywordResults.slice(0, KEYWORD_POOL));
+    }
+
+    if (candidates.length === 0) {
+      console.log(`[KBService] Total: ${elapsed()} (aucun candidat)`);
+      return [];
+    }
+
+    // ── #2 : RERANK — le cross-encoder relit chaque candidat face à la question
+    const pool = candidates.slice(0, RERANK_POOL);
+    let finalResults = pool;
+    if (rerankService.available && pool.length > 1) {
       try {
-        results = await this._vectorSearch(queryText, keywords);
-        if (results.length > 0) {
-          console.log(`[KBService] Vector search: ${results.length} results. Top similarity: ${results[0]._vectorScore?.toFixed(3)}`);
-          console.timeEnd('KBService_TotalTime');
-          return results;
+        const reranked = await rerankService.rerank(searchText, pool, TOP_RESULTS);
+        const topScore = reranked[0]?._rerankScore ?? 0;
+
+        // Garde-fou : on ne remplace l'ordre RRF que si le reranker est
+        // réellement confiant. Sinon son classement est du bruit.
+        if (topScore >= RERANK_MIN_CONFIDENCE) {
+          finalResults = reranked;
+          console.log(`[KBService] Rerank OK: top score ${topScore.toFixed(3)}`);
+        } else {
+          console.log(`[KBService] Rerank low confidence (${topScore.toFixed(3)} < ${RERANK_MIN_CONFIDENCE}) — keeping RRF order`);
         }
-        console.log('[KBService] Vector search returned 0 results, falling back to keywords');
       } catch (err) {
-        console.warn(`[KBService] Vector search failed: ${err.message} — falling back to keywords`);
+        console.warn(`[KBService] Rerank failed (${err.message}) — keeping RRF order`);
       }
     }
 
-    results = await this._keywordSearch(keywords);
-    console.log(`[KBService] Keyword search: ${results.length} results`);
-    console.timeEnd('KBService_TotalTime');
-    return results;
+    console.log(`[KBService] Total: ${elapsed()}`);
+    return finalResults.slice(0, TOP_RESULTS);
   }
 
   async findRelevantInfo(query) {
     const keywords = this.extractKeywords(query.toLowerCase());
-    return this.findRelevantInfoWithKeywords(keywords);
+    return this.findRelevantInfoWithKeywords(keywords, query);
+  }
+
+  // Recherche vectorielle qui n'explose jamais (fallback silencieux)
+  async _safeVectorSearch(searchText) {
+    if (!config.cohereApiKey) return [];
+    try {
+      return await this._vectorSearch(searchText);
+    } catch (err) {
+      console.warn(`[KBService] Vector search failed: ${err.message}`);
+      return [];
+    }
+  }
+
+  // ── Reciprocal Rank Fusion ────────────────────────────────────────────────
+  // Chaque liste vote pour ses documents selon leur RANG (pas leur score) :
+  // score_RRF(doc) = Σ 1/(K + rang). Un doc bien classé dans LES DEUX listes
+  // remonte naturellement en tête.
+  _reciprocalRankFusion(listA, listB) {
+    const scores = new Map(); // id → { doc, score }
+
+    const addVotes = (list) => {
+      list.forEach((doc, rank) => {
+        const key = doc.id;
+        const vote = 1 / (RRF_K + rank + 1);
+        if (scores.has(key)) {
+          scores.get(key).score += vote;
+        } else {
+          scores.set(key, { doc, score: vote });
+        }
+      });
+    };
+
+    addVotes(listA);
+    addVotes(listB);
+
+    return Array.from(scores.values())
+      .sort((a, b) => b.score - a.score)
+      .map(entry => ({ ...entry.doc, _rrfScore: entry.score }));
   }
 
   // ══════════════════════════════════════════════════════════════════════
   // VECTOR SEARCH — in-memory cosine similarity
-  // Loads all docs with embeddings once, caches them, then scores
+  // #1 : reçoit la question COMPLÈTE (le modèle d'embedding comprend les
+  //      phrases, pas les sacs de mots-clés)
+  // #4 : score = MAX de similarité entre la question et l'embedding principal
+  //      + tous les embeddings de paraphrases du doc (multi-query indexing)
   // ══════════════════════════════════════════════════════════════════════
-  async _vectorSearch(queryText, keywords = []) {
+  // `keywords` n'est plus utilisé ici : le boost de noms propres repart
+  // désormais du texte brut de la question, seul endroit où la casse survit.
+  async _vectorSearch(queryText) {
     const queryVector = await embeddingService.embedText(queryText, 'search_query');
 
     // Load & cache all embedded docs on first call
@@ -107,54 +200,125 @@ class KnowledgeBaseService {
       throw new Error('No embedded documents found — run generate-embeddings.js first');
     }
 
-    // Build a set of proper-noun keywords (capitalized, length > 3)
-    // Used to boost docs where these names appear explicitly
-    const nameKeywords = keywords
-      .filter(k => k.length > 3 && /[A-Z]/.test(k[0]))
-      .map(k => k.toLowerCase());
+    // Noms propres cherchés dans la question.
+    // ⚠️ Bug historique : on filtrait `keywords` sur une majuscule initiale,
+    // or aiService.rewriteQueryForSearch() renvoie TOUT en minuscules
+    // (`return keywords.toLowerCase()`), donc la liste était TOUJOURS vide et
+    // le boost ne s'appliquait jamais. On repart du texte brut de la question,
+    // qui lui a conservé sa casse.
+    const nameKeywords = (queryText.match(/\b[A-ZÀ-Ý][\wÀ-ÿ'-]{3,}/g) || [])
+      .map(w => w.toLowerCase());
+    const queryLower = queryText.toLowerCase();
 
-    // Compute cosine similarity + optional name boost
+    // Compute max-similarity (doc principal + paraphrases) + name boost
     const scored = allDocs
       .map(doc => {
         let sim = cosineSimilarity(queryVector, doc.embedding);
-        // Name boost: if a proper noun keyword appears in the doc's question or name, +0.08
+
+        // #4 — si le doc a des paraphrases embedées, on prend la MEILLEURE
+        // correspondance : une même réponse devient trouvable via toutes
+        // les façons de poser la question.
+        if (Array.isArray(doc.paraphraseEmbeddings)) {
+          for (const pv of doc.paraphraseEmbeddings) {
+            const pSim = cosineSimilarity(queryVector, pv);
+            if (pSim > sim) sim = pSim;
+          }
+        }
+
+        // Name boost #1 : un nom propre de la question apparaît dans le doc.
         if (nameKeywords.length > 0) {
           const docText = ((doc.question || '') + ' ' + (doc.name || '')).toLowerCase();
-          const hasName = nameKeywords.some(n => docText.includes(n));
-          if (hasName) sim = Math.min(1, sim + 0.08);
+          if (nameKeywords.some(n => docText.includes(n))) sim = Math.min(1, sim + 0.08);
+        }
+
+        // Name boost #2 : le nom du document (ex. un professeur) apparaît dans
+        // la question. Fonctionne quelle que soit la langue — l'arabe et la
+        // derdja n'ont pas de majuscules, donc le boost #1 seul les ignorait.
+        if (doc.name) {
+          const parts = doc.name.toLowerCase().split(/\s+/).filter(p => p.length > 3);
+          if (parts.length > 0 && parts.some(p => queryLower.includes(p))) {
+            sim = Math.min(1, sim + 0.08);
+          }
         }
         return { ...doc, _vectorScore: sim };
       })
-      .filter(doc => doc._vectorScore >= MIN_SIM_SCORE)
       .sort((a, b) => b._vectorScore - a._vectorScore);
 
-    return this.deduplicateAndNormalizeResults(scored).slice(0, TOP_RESULTS);
+    // Seuil RELATIF : au lieu d'un seuil fixe (fragile), on garde les docs
+    // proches du meilleur score, avec un plancher absolu anti-bruit.
+    const bestSim = scored.length > 0 ? scored[0]._vectorScore : 0;
+    const threshold = Math.max(MIN_SIM_FLOOR, bestSim - REL_SIM_DELTA);
+    const kept = scored.filter(doc => doc._vectorScore >= threshold);
+
+    return this.deduplicateAndNormalizeResults(kept).slice(0, VECTOR_POOL);
   }
 
-  // Load all docs from all collections that have embeddings
+  // Charge tous les docs embedés en mémoire.
+  // - TTL : sans lui, un réindexage (embeddings/paraphrases) restait invisible
+  //   jusqu'au redémarrage du serveur.
+  // - Promesse partagée : deux requêtes simultanées au démarrage à froid
+  //   lançaient chacune un chargement complet de la base.
   async _getDocCache() {
-    if (this._docCache) return this._docCache;
+    const fresh = this._docCache
+      && (Date.now() - this._cacheLoadedAt) < CACHE_TTL_MS;
+    if (fresh) return this._docCache;
 
-    console.log('[KBService] Loading all embedded docs into memory cache...');
-    const start = Date.now();
+    if (this._cacheLoading) return this._cacheLoading;
 
-    const promises = this.validCollections.map(async col => {
-      try {
-        const docs = await col.model.find({ embedding: { $exists: true, $ne: null } }).lean();
-        return docs.map(d => ({ ...d, _collectionName: col.name }));
-      } catch {
-        return [];
+    this._cacheLoading = (async () => {
+      console.log('[KBService] Loading all embedded docs into memory cache...');
+      const start = Date.now();
+
+      const promises = this.validCollections.map(async col => {
+        try {
+          // Projection : depuis l'ajout des paraphrases, chaque document porte
+          // 6 vecteurs de 1024 flottants. Sans exclusion, on transférait aussi
+          // le TEXTE des paraphrases et une demi-douzaine de champs jamais lus
+          // au moment du scoring — pour ~16 Mo tirés d'Atlas à chaque chargement.
+          const docs = await col.model
+            .find({ embedding: { $exists: true, $ne: null } })
+            .select('-paraphrases -related_tips -source -visibility -created_at -updated_at -difficulty -user_role')
+            .lean();
+          return docs.map(d => ({ ...d, _collectionName: col.name }));
+        } catch (err) {
+          console.error(`[KBService] Cache load failed for ${col.name}: ${err.message}`);
+          return [];
+        }
+      });
+
+      const allDocs = (await Promise.all(promises)).flat();
+
+      // Si la base est injoignable, on garde l'ancien cache plutôt que de
+      // le remplacer par du vide (sinon la recherche vectorielle meurt).
+      if (allDocs.length === 0 && this._docCache?.length > 0) {
+        console.warn('[KBService] Reload returned 0 docs — keeping previous cache');
+        this._cacheLoading = null;
+        return this._docCache;
       }
-    });
 
-    const allDocs = (await Promise.all(promises)).flat();
-    this._docCache = allDocs;
-    console.log(`[KBService] Cache loaded: ${allDocs.length} embedded docs in ${Date.now() - start}ms`);
-    return allDocs;
+      const withParaphrases = allDocs.filter(d => Array.isArray(d.paraphraseEmbeddings)).length;
+      this._docCache     = allDocs;
+      this._cacheLoadedAt = Date.now();
+      this._cacheLoading  = null;
+      console.log(`[KBService] Cache loaded: ${allDocs.length} embedded docs (${withParaphrases} avec paraphrases) in ${Date.now() - start}ms`);
+      return allDocs;
+    })();
+
+    return this._cacheLoading;
   }
 
   // Invalidate cache (call when new docs are added)
-  invalidateCache() { this._docCache = null; }
+  invalidateCache() { this._docCache = null; this._cacheLoadedAt = 0; }
+
+  // Préchargement au démarrage : sinon c'est la PREMIÈRE question posée qui
+  // paie le chargement complet des vecteurs. Appelé sans await par server.js
+  // pour ne pas retarder l'ouverture du port (Render attend le bind pour
+  // considérer le service en ligne).
+  warmUp() {
+    return this._getDocCache()
+      .then(docs => console.log(`[KBService] Warm-up terminé : ${docs.length} docs prêts`))
+      .catch(err => console.warn(`[KBService] Warm-up échoué (rechargé à la 1re requête): ${err.message}`));
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // KEYWORD SEARCH — original fallback

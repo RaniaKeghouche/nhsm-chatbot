@@ -1,17 +1,17 @@
-// ===== 4. ROUTES API AMÉLIORÉES - src/routes/api.js =====
+// src/routes/api.js
 const express = require('express');
 const router = express.Router();
 const chatController = require('../controllers/chatController');
+const { validateQuery, apiLimiter, sizeLimiter } = require('../middleware/security');
 
-// Route streaming
-router.post('/query-stream', (req, res, next) => {
-  console.log('[Routes/api.js] POST /query-stream hit');
+// Ordre volontaire : quota global → quota messages longs → validation du contenu.
+// Les limiteurs existaient déjà mais n'étaient montés NULLE PART : l'API était
+// ouverte, et chaque requête déclenche 2 à 3 appels Groq + 1 Cohere (coût réel).
+router.post('/query-stream', apiLimiter, sizeLimiter, validateQuery, (req, res, next) => {
   chatController.processQueryStream(req, res, next).catch(next);
 });
 
-// Route normale (fallback)
-router.post('/query', (req, res, next) => {
-  console.log('[Routes/api.js] POST /query hit');
+router.post('/query', apiLimiter, sizeLimiter, validateQuery, (req, res, next) => {
   chatController.processQuery(req, res, next).catch(next);
 });
 

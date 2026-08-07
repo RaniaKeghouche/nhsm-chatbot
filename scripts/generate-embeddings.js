@@ -10,8 +10,8 @@
  */
 
 const dns = require('dns'); dns.setServers(['8.8.8.8', '8.8.4.4']);
-const mongoose = require('c:/Users/kegho/Desktop/web/NHSM/node_modules/mongoose');
-const config   = require('c:/Users/kegho/Desktop/web/NHSM/src/config/config');
+const mongoose = require('mongoose');
+const config   = require('../src/config/config');
 
 // We bypass Mongoose models — use raw collection names instead
 const RAW_COLLECTIONS = [

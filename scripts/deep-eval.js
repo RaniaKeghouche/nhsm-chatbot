@@ -18,11 +18,11 @@
 const dns = require('dns'); dns.setServers(['8.8.8.8', '8.8.4.4']);
 const fs       = require('fs');
 const path     = require('path');
-const mongoose = require('c:/Users/kegho/Desktop/web/NHSM/node_modules/mongoose');
-const Groq     = require('c:/Users/kegho/Desktop/web/NHSM/node_modules/groq-sdk');
-const config   = require('c:/Users/kegho/Desktop/web/NHSM/src/config/config');
-const aiService = require('c:/Users/kegho/Desktop/web/NHSM/src/services/aiService');
-const kbService = require('c:/Users/kegho/Desktop/web/NHSM/src/services/knowledgeBaseService');
+const mongoose = require('mongoose');
+const Groq     = require('groq-sdk');
+const config   = require('../src/config/config');
+const aiService = require('../src/services/aiService');
+const kbService = require('../src/services/knowledgeBaseService');
 
 const groq = new Groq({ apiKey: config.groqApiKey });
 

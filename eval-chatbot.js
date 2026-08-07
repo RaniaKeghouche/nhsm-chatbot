@@ -18,10 +18,10 @@
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
-const mongoose  = require('c:/Users/kegho/Desktop/web/NHSM/node_modules/mongoose');
-const config    = require('c:/Users/kegho/Desktop/web/NHSM/src/config/config');
-const aiService = require('c:/Users/kegho/Desktop/web/NHSM/src/services/aiService');
-const kbService = require('c:/Users/kegho/Desktop/web/NHSM/src/services/knowledgeBaseService');
+const mongoose  = require('mongoose');
+const config    = require('./src/config/config');
+const aiService = require('./src/services/aiService');
+const kbService = require('./src/services/knowledgeBaseService');
 
 // ─────────────────────────────────────────────────────────────
 // ANSI colours
@@ -512,8 +512,8 @@ async function runTest(tc) {
     const kwStr  = await aiService.rewriteQueryForSearch(tc.query);
     const keywords = kwStr.split(',').map(k => k.trim()).filter(Boolean);
 
-    // 2. DB retrieval
-    const candidates = await kbService.findRelevantInfoWithKeywords(keywords);
+    // 2. DB retrieval (hybride : question complète + mots-clés)
+    const candidates = await kbService.findRelevantInfoWithKeywords(keywords, tc.query);
 
     // 3. Context (negative-answer filter)
     const finalContext = candidates

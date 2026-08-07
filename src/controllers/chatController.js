@@ -20,6 +20,19 @@ function isGreeting(query) {
   return GREETING_PATTERNS.some(p => p.test(q));
 }
 
+// ── #5 : Nettoyage de l'historique envoyé par le client ────────────────────
+// On ne fait JAMAIS confiance au client : types vérifiés, tailles bornées.
+function sanitizeHistory(rawHistory) {
+  if (!Array.isArray(rawHistory)) return [];
+  return rawHistory
+    .filter(m => m && typeof m === 'object' && typeof m.content === 'string' && m.content.trim().length > 0)
+    .map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content.trim().substring(0, 600),
+    }))
+    .slice(-6); // seulement les 6 derniers messages
+}
+
 // ── Greeting responses (multilingual) ──────────────────────────────────────
 function greetingResponse(query) {
   const q = query.trim().toLowerCase();
@@ -44,9 +57,10 @@ class ChatController {
   async processQueryStream(req, res, next) {
     const startTime = Date.now();
     const { query } = req.body;
-    
+    const history = sanitizeHistory(req.body.history);
+
     try {
-      console.log(`[ChatController] Processing streamed query: "${query.substring(0, 50)}..."`);
+      console.log(`[ChatController] Processing streamed query: "${query.substring(0, 50)}..." (history: ${history.length} msgs)`);
 
       // ── Fast-path: greetings bypass DB entirely ─────────────────────────
       if (isGreeting(query)) {
@@ -58,13 +72,16 @@ class ChatController {
         return res.end();
       }
 
+      // ── #5 : résoudre les questions de suivi ("et pour SESA ?") ─────────
+      const standaloneQuery = await aiService.condenseConversationalQuery(history, query);
+
       console.log('[ChatController] Rewriting query for keywords...');
-      const keywordsString = await aiService.rewriteQueryForSearch(query);
+      const keywordsString = await aiService.rewriteQueryForSearch(standaloneQuery);
       const keywords = keywordsString.split(',').map(kw => kw.trim()).filter(kw => kw.length > 0);
       console.log(`[ChatController] Keywords extracted: ${keywords.join(', ')}`);
-      
+
       console.log('[ChatController] Searching knowledge base...');
-      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, query);
+      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, standaloneQuery);
       console.log(`[ChatController] Found ${candidateDocs.length} candidate documents`);
       
       // Use top KB results — expand limit for list-type queries
@@ -95,9 +112,9 @@ class ChatController {
       // Envoyer les sources d'abord
       res.write(`SOURCES:${JSON.stringify(sourcesForClient)}\n\n`);
       
-      // Stream de la réponse
+      // Stream de la réponse (question autonome + historique pour la cohérence)
       console.log('[ChatController] Starting Groq streaming...');
-      const stream = await aiService.generateResponseStream(query, finalContext);
+      const stream = await aiService.generateResponseStream(standaloneQuery, finalContext, history);
       console.log('[ChatController] Groq stream received, iterating...');
       
       let chunkCount = 0;
@@ -115,11 +132,15 @@ class ChatController {
       
     } catch (error) {
       console.error('[ChatController] Streaming error:', error.message);
-      console.error('[ChatController] Error stack:', error.stack);
       if (!res.headersSent) {
         next(error);
       } else {
-        res.write('\n\nERROR: Une erreur est survenue lors de la génération de la réponse.');
+        // Les en-têtes sont partis : impossible de changer le code HTTP,
+        // on ne peut plus qu'écrire du texte dans le flux déjà ouvert.
+        const message = error.isRateLimit
+          ? aiService.rateLimitReply(query)
+          : 'Une erreur est survenue lors de la génération de la réponse.';
+        res.write(`\n\n${message}`);
         res.end();
       }
     }
@@ -129,9 +150,10 @@ class ChatController {
   async processQuery(req, res, next) {
     const startTime = Date.now();
     const { query } = req.body;
-    
+    const history = sanitizeHistory(req.body.history);
+
     try {
-      console.log(`[ChatController] Processing query: "${query.substring(0, 50)}..."`);
+      console.log(`[ChatController] Processing query: "${query.substring(0, 50)}..." (history: ${history.length} msgs)`);
 
       // ── Fast-path: greetings bypass DB entirely ─────────────────────────
       if (isGreeting(query)) {
@@ -139,11 +161,14 @@ class ChatController {
         return res.status(200).json({ success: true, answer: reply, sources: [], processingTime: 1 });
       }
 
-      const keywordsString = await aiService.rewriteQueryForSearch(query);
+      // ── #5 : résoudre les questions de suivi ("et pour SESA ?") ─────────
+      const standaloneQuery = await aiService.condenseConversationalQuery(history, query);
+
+      const keywordsString = await aiService.rewriteQueryForSearch(standaloneQuery);
       const keywords = keywordsString.split(',').map(kw => kw.trim()).filter(kw => kw.length > 0);
-      
-      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, query);
-      
+
+      const candidateDocs = await knowledgeBaseService.findRelevantInfoWithKeywords(keywords, standaloneQuery);
+
       // Use top KB results directly — for list queries return more docs
       const contextLimit = candidateDocs.length > 10 ? 15 : MAX_SOURCES_TO_CLIENT;
       const finalContext = candidateDocs
@@ -152,8 +177,8 @@ class ChatController {
           return !ans.startsWith('currently no available') && !ans.startsWith('no information');
         })
         .slice(0, contextLimit);
-      
-      const aiAnswer = await aiService.generateResponse(query, finalContext);
+
+      const aiAnswer = await aiService.generateResponse(standaloneQuery, finalContext, history);
       
       const sourcesForClient = finalContext.slice(0, MAX_SOURCES_TO_CLIENT).map(info => ({
         id: info.id || null,

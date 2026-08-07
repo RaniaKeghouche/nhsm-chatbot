@@ -383,7 +383,7 @@
         
         <div class="chat-footer">
             <div class="message-input-container">
-                <input type="text" class="message-input" id="messageInput" placeholder="Ask your question..." onkeypress="handleKeyPress(event)">
+                <input type="text" class="message-input" id="messageInput" maxlength="500" placeholder="Ask your question..." onkeypress="handleKeyPress(event)">
                 <button class="send-button" onclick="sendMessage()">
                     <i class="fas fa-paper-plane"></i>
                 </button>
@@ -412,6 +412,21 @@
 
         let isProcessing = false; // Protection contre questions multiples
 
+        // ── Mémoire de conversation (#5) ─────────────────────────────────
+        // Envoyée au serveur pour comprendre les questions de suivi
+        // ("et pour SESA ?" après une question sur CCS)
+        let conversationHistory = [];
+
+        function recordExchange(userQuery, botAnswer) {
+            if (!botAnswer || !botAnswer.trim()) return;
+            conversationHistory.push({ role: 'user', content: userQuery });
+            conversationHistory.push({ role: 'assistant', content: botAnswer.substring(0, 600) });
+            // Garder seulement les 12 derniers messages (6 échanges)
+            if (conversationHistory.length > 12) {
+                conversationHistory = conversationHistory.slice(-12);
+            }
+        }
+
         function sendMessage() {
             const message = messageInput.value.trim();
             
@@ -421,9 +436,10 @@
                 return;
             }
             
-            // Validation longueur
-            if (message.length > 1000) {
-                addMessageToUI("Votre message est trop long (max 1000 caractères).", 'bot', true);
+            // Validation longueur — DOIT rester alignée sur validateQuery côté
+            // serveur (500), sinon le message part et revient en erreur 400.
+            if (message.length > 500) {
+                addMessageToUI("Votre message est trop long (max 500 caractères).", 'bot', true);
                 return;
             }
             
@@ -449,6 +465,21 @@
             sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
         }
 
+        // ── Rendu sûr ──────────────────────────────────────────────────────
+        // Le texte affiché vient du LLM et de la base : on ne lui fait pas
+        // confiance. En neutralisant '<' avant marked, aucune balise ne peut
+        // se former (donc pas de <img onerror=...> injecté via le contexte),
+        // tandis que la syntaxe markdown (**, ##, listes, code) reste intacte.
+        function renderMarkdown(text) {
+            return marked.parse(String(text ?? '').replace(/</g, '&lt;'));
+        }
+
+        function escapeHtml(text) {
+            return String(text ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
+        }
+
         function addMessageToUI(content, sender, isErrorMessage = false, isSourcesMessage = false) {
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message');
@@ -465,8 +496,10 @@
                 }
             }
             
-            messageDiv.innerHTML = marked.parse(content);
-            
+            // Les listes de sources sont déjà du HTML construit et échappé
+            // par displaySources() ; tout le reste passe par le rendu sûr.
+            messageDiv.innerHTML = isSourcesMessage ? content : renderMarkdown(content);
+
             const now = new Date();
             const timeDiv = document.createElement('div');
             timeDiv.classList.add('message-time');
@@ -487,6 +520,12 @@
                 // Essayer le streaming d'abord
                 await getStreamingResponse(userQuery);
             } catch (error) {
+                if (error.isClientError) {
+                    hideTypingIndicator();
+                    addMessageToUI(error.message, 'bot', true);
+                    enableInput();
+                    return;
+                }
                 console.log('Streaming failed, using fallback:', error);
                 await getFallbackResponse(userQuery);
             }
@@ -499,10 +538,20 @@
                     'Content-Type': 'application/json',
                     'Accept': 'text/plain'
                 },
-                body: JSON.stringify({ query: userQuery })
+                body: JSON.stringify({ query: userQuery, history: conversationHistory.slice(-6) })
             });
 
             if (!response.ok) {
+                // Une erreur 4xx (message trop long, quota atteint, spam) est
+                // une décision du serveur, pas une panne du streaming :
+                // réessayer sur /api/query donnerait la même réponse tout en
+                // consommant un 2e crédit de quota. On la remonte telle quelle.
+                if (response.status >= 400 && response.status < 500) {
+                    const data = await response.json().catch(() => ({}));
+                    const err = new Error(data.message || `Requête refusée (${response.status})`);
+                    err.isClientError = true;
+                    throw err;
+                }
                 throw new Error(`Streaming failed: ${response.status}`);
             }
 
@@ -541,7 +590,7 @@
                     if (messageDiv && contentDiv) {
                         // Nettoyer les métadonnées
                         const cleanBuffer = buffer.replace(/PROCESSING_TIME:.+/, '');
-                        contentDiv.innerHTML = marked.parse(cleanBuffer);
+                        contentDiv.innerHTML = renderMarkdown(cleanBuffer);
                         chatBody.scrollTop = chatBody.scrollHeight;
                     }
                 }
@@ -550,7 +599,11 @@
                 if (sources.length > 0) {
                     displaySources(sources);
                 }
-                
+
+                // Mémoriser l'échange pour les questions de suivi (#5)
+                const finalAnswer = buffer.replace(/PROCESSING_TIME:.+/, '').trim();
+                recordExchange(userQuery, finalAnswer);
+
             } finally {
                 enableInput();
             }
@@ -564,7 +617,7 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ query: userQuery })
+                    body: JSON.stringify({ query: userQuery, history: conversationHistory.slice(-6) })
                 });
 
                 hideTypingIndicator();
@@ -578,6 +631,7 @@
                 
                 if (data.success && data.answer) {
                     addMessageToUI(data.answer, 'bot');
+                    recordExchange(userQuery, data.answer);
                     if (data.sources && data.sources.length > 0) {
                         displaySources(data.sources);
                     }
@@ -630,7 +684,8 @@
             let sourcesHtml = '<strong>Sources pertinentes:</strong><ul>';
             sources.forEach(source => {
                 const sourceTitle = source.title || source.question || `ID: ${source.id || 'N/A'}`;
-                sourcesHtml += `<li>${source.category || 'Source'} - ${sourceTitle}</li>`;
+                // Titres et catégories viennent de la base → échappés avant injection
+                sourcesHtml += `<li>${escapeHtml(source.category || 'Source')} - ${escapeHtml(sourceTitle)}</li>`;
             });
             sourcesHtml += '</ul>';
             addMessageToUI(sourcesHtml, 'bot', false, true);

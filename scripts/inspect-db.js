@@ -4,9 +4,9 @@
  * Run: node scripts/inspect-db.js
  */
 const dns = require('dns'); dns.setServers(['8.8.8.8', '8.8.4.4']);
-const mongoose = require('c:/Users/kegho/Desktop/web/NHSM/node_modules/mongoose');
-const config   = require('c:/Users/kegho/Desktop/web/NHSM/src/config/config');
-const { MathTip, GeneralFAQ, Resource, Wellness, StudyTip, TeacherInfo, Specialty, StudentExperience, Humor } = require('c:/Users/kegho/Desktop/web/NHSM/src/models');
+const mongoose = require('mongoose');
+const config   = require('../src/config/config');
+const { MathTip, GeneralFAQ, Resource, Wellness, StudyTip, TeacherInfo, Specialty, StudentExperience, Humor } = require('../src/models');
 
 const COLLECTIONS = [
   { name: 'Specialty',         model: Specialty },

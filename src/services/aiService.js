@@ -33,12 +33,73 @@ async function makeGroqRequest(prompt, model, temperature, stream = false) {
     return content;
   } catch (error) {
     console.error(`[AIService] Groq API call failed for model ${model}:`, error.message);
-    console.error(`[AIService] Error details:`, error);
+    // 429 = quota Groq (6000 tokens/min en offre gratuite), pas un bug.
+    // On le marque pour que l'appelant affiche un message compréhensible
+    // plutôt qu'un « erreur technique » opaque.
+    if (error?.status === 429) error.isRateLimit = true;
     throw error;
   }
 }
 
+// Message d'attente, dans la langue de l'étudiant
+function rateLimitMessage(lang = '') {
+  const l = lang.toLowerCase();
+  if (l.includes('arabic') || l.includes('derdja')) {
+    return 'المساعد مشغول حاليًا 😅 انتظر بضع ثوانٍ ثم أعد المحاولة من فضلك.';
+  }
+  if (l.includes('english')) {
+    return "I'm getting a lot of questions right now 😅 Please wait a few seconds and try again.";
+  }
+  return "Je reçois beaucoup de questions en ce moment 😅 Patiente quelques secondes et réessaie.";
+}
+
 class AIService {
+  /**
+   * #5 — CONDENSATION CONVERSATIONNELLE
+   * Transforme une question de suivi ("et pour SESA ?", "il enseigne quoi ?")
+   * en question AUTONOME en utilisant l'historique de la conversation.
+   * C'est cette question autonome qui sert ensuite à la recherche en base.
+   */
+  async condenseConversationalQuery(history = [], userQuery) {
+    // Pas d'historique → rien à résoudre
+    if (!Array.isArray(history) || history.length === 0) return userQuery;
+
+    // Question déjà longue et explicite → probablement autonome, on économise un appel
+    if (userQuery.trim().length > 80) return userQuery;
+
+    const historyText = history
+      .slice(-6) // les 6 derniers messages suffisent
+      .map(m => `${m.role === 'user' ? 'Student' : 'Assistant'}: ${String(m.content || '').substring(0, 300)}`)
+      .join('\n');
+
+    const prompt = `Given a conversation between a student and an assistant of NHSM (National Higher School of Mathematics), rewrite the student's LAST message as a fully standalone question.
+
+Rules:
+1. Resolve pronouns and implicit references ("il", "elle", "ça", "cette spécialité", "and him?", "et l'autre ?") using the conversation.
+2. Keep the SAME language as the student's last message (French stays French, English stays English, Arabic/Derdja stays Arabic).
+3. If the last message is ALREADY standalone, return it unchanged.
+4. Return ONLY the rewritten question, no explanation, no quotes.
+
+Conversation:
+${historyText}
+
+Student's last message: "${userQuery}"
+
+Standalone question:`;
+
+    try {
+      const standalone = await makeGroqRequest(prompt, REWRITE_MODEL, 0.0);
+      const cleaned = standalone.trim().replace(/^["']|["']$/g, '');
+      // Garde-fous : si le modèle divague, on garde la question originale
+      if (!cleaned || cleaned.length < 3 || cleaned.length > 400) return userQuery;
+      console.log(`[AIService] Condensed query: "${userQuery}" -> "${cleaned}"`);
+      return cleaned;
+    } catch (error) {
+      console.error('[AIService] Condense failed, using original query.', error.message);
+      return userQuery;
+    }
+  }
+
   async rewriteQueryForSearch(userQuery) {
     console.log(`[AIService] Rewriting query with Groq: "${userQuery}"`);
     const rewritePrompt = `Your task is to extract the main keywords and key concepts from the user's query to search a database.
@@ -67,84 +128,6 @@ Example 5: User Query: "شكون هو أحسن أستاذ في المدرسة" -
       console.error(`[AIService] Failed to rewrite query. Falling back to basic processing.`, error);
       return userQuery.toLowerCase().replace(/[^a-z0-9\s,]/g, '');
     }
-  }
-
-  async filterContext(userQuery, documents, keywords = []) {
-    if (!documents || documents.length === 0) return [];
-
-    console.log(`[AIService] Filtering ${documents.length} documents with improved algorithm`);
-
-    const queryForScoring = keywords && keywords.length > 0 ? keywords.join(' ') : userQuery;
-
-    // 🎯 SCORING AMÉLIORÉ avec vérification de pertinence
-    const scoredDocs = documents.map((doc, index) => {
-      const relevanceScore = this.calculateDetailedRelevance(queryForScoring, doc);
-      return { ...doc, index, relevanceScore };
-    });
-
-    // Garder seulement les documents avec un score > 0.1
-    const relevantDocs = scoredDocs.filter(doc => doc.relevanceScore > 0.1);
-
-    if (relevantDocs.length === 0) {
-      console.log('[AIService] No relevant documents found after filtering');
-      return [];
-    }
-
-    // Trier par pertinence et prendre les 3 meilleurs
-    relevantDocs.sort((a, b) => b.relevanceScore - a.relevanceScore);
-    const topDocs = relevantDocs.slice(0, 3);
-
-    console.log(`[AIService] Filtered to ${topDocs.length} highly relevant documents`);
-    return topDocs;
-  }
-
-  calculateDetailedRelevance(query, doc) {
-    const queryWords = query.toLowerCase().split(/\s+/);
-    const docText = `${doc.question || ''} ${doc.answer || ''}`.toLowerCase();
-    const docTags = (doc.tags || []).join(' ').toLowerCase();
-
-    let score = 0;
-    let matchedWords = 0;
-
-    queryWords.forEach(word => {
-      if (word.length < 3) return; // Ignorer les mots trop courts
-
-      // Expand word to its stem variants (singular/plural)
-      const stems = [word];
-      if (word.endsWith('ies')) stems.push(word.slice(0, -3) + 'y');
-      else if (word.endsWith('y')) stems.push(word.slice(0, -1) + 'ies');
-      if (word.endsWith('s') && word.length > 4) stems.push(word.slice(0, -1));
-      else if (word.length > 3) stems.push(word + 's');
-
-      const matched = stems.some(stem => docText.includes(stem) || docTags.includes(stem));
-      if (!matched) return;
-
-      // Correspondance exacte dans la question (poids fort)
-      if (doc.question && stems.some(stem => doc.question.toLowerCase().includes(stem))) {
-        score += 10;
-        matchedWords++;
-      }
-
-      // Correspondance dans les tags (poids moyen)
-      if (stems.some(stem => docTags.includes(stem))) {
-        score += 5;
-        matchedWords++;
-      }
-
-      // Correspondance dans la réponse (poids faible)
-      if (doc.answer && stems.some(stem => doc.answer.toLowerCase().includes(stem))) {
-        score += 2;
-        matchedWords++;
-      }
-    });
-
-    // Bonus si plusieurs mots correspondent
-    if (matchedWords > 1) {
-      score *= 1.5;
-    }
-
-    // Normaliser le score (0-1) — diviseur fixe pour éviter la dilution
-    return Math.min(score / 20, 1);
   }
 
   _detectQueryLanguage(query) {
@@ -204,14 +187,41 @@ Guidelines:
 5. Respond in English`;
   }
 
-  _buildPrompt(systemRules, userQuery, context = [], detectedLang) {
-    const contextText = context
-      .map((doc, idx) => {
-        const question = doc.question || 'Information';
-        const answer = doc.answer || 'No details available';
-        return `[Source ${idx + 1}]\nQ: ${question}\nA: ${answer}`;
-      })
-      .join('\n\n');
+  _buildPrompt(systemRules, userQuery, context = [], detectedLang, history = []) {
+    // Budget de contexte.
+    // Le palier gratuit de Groq plafonne à 6000 tokens/minute. Sans borne, une
+    // question du type « liste tous les professeurs » produisait un prompt de
+    // ~18 600 caractères (~4 600 tokens) : une seule question épuisait presque
+    // tout le quota de la minute et les suivantes tombaient en 429.
+    // On borne donc chaque source ET le total, en gardant les documents les
+    // mieux classés — ils arrivent déjà triés par pertinence.
+    const MAX_CONTEXT_CHARS = 7000;
+    const MAX_ANSWER_CHARS  = 900;
+    const MIN_ANSWER_CHARS  = 260;
+
+    // La part allouée à chaque source s'adapte à leur nombre : on préfère
+    // RACCOURCIR toutes les sources plutôt qu'en SUPPRIMER.
+    // Sur « liste tous les professeurs », un plafond fixe faisait tomber 7 des
+    // 15 fiches et le bot en oubliait la moitié ; ici les 15 passent, résumées.
+    const perDoc = context.length > 0
+      ? Math.max(MIN_ANSWER_CHARS, Math.min(MAX_ANSWER_CHARS, Math.floor(MAX_CONTEXT_CHARS / context.length)))
+      : MAX_ANSWER_CHARS;
+
+    let used = 0;
+    const blocks = [];
+    for (const doc of context) {
+      const question = doc.question || 'Information';
+      let answer = doc.answer || 'No details available';
+      if (answer.length > perDoc) answer = answer.substring(0, perDoc) + '…';
+
+      const block = `[Source ${blocks.length + 1}]\nQ: ${question}\nA: ${answer}`;
+      used += block.length;
+      blocks.push(block);
+    }
+
+    console.log(`[AIService] Contexte: ${blocks.length} sources, ${used} chars (${perDoc}/source)`);
+
+    const contextText = blocks.join('\n\n');
 
     const isFrench = detectedLang.toLowerCase().includes('french');
     const isArabic = detectedLang.toLowerCase().includes('arabic') || detectedLang.toLowerCase().includes('derdja');
@@ -223,11 +233,36 @@ Guidelines:
       instruction = 'أجب على سؤال المستخدم بناءً على السياق المقدم أعلاه.';
     }
 
+    // Garde-fou anti-hallucination : sans contexte récupéré, le modèle
+    // n'a plus que ses propres connaissances — et il inventerait des
+    // professeurs, des modules ou des dates. On lui interdit explicitement
+    // de combler le vide, au lieu de compter sur la règle générale.
+    if (context.length === 0) {
+      if (isArabic) {
+        instruction = 'لم يتم العثور على أي معلومة في قاعدة البيانات. أخبر الطالب بصراحة أنك لا تملك هذه المعلومة، واقترح عليه مواضيع يمكنك المساعدة فيها (التخصصات، الأساتذة، طرق الدراسة، الحياة الطلابية). لا تخترع أي معلومة.';
+      } else if (isFrench) {
+        instruction = "Aucune information n'a été trouvée dans la base de connaissances. Dis franchement à l'étudiant que tu n'as pas cette information, puis propose les sujets que tu peux traiter (spécialités, professeurs, méthodes d'étude, vie étudiante). N'INVENTE AUCUN fait, nom, date ou chiffre.";
+      } else {
+        instruction = 'No information was found in the knowledge base. Tell the student frankly that you do not have this information, then suggest topics you can help with (specialties, professors, study methods, student life). Do NOT invent any fact, name, date or figure.';
+      }
+    }
+
+    // #5 — Historique de conversation : permet des réponses cohérentes
+    // avec ce qui a déjà été dit ("comme mentionné", pas de répétitions...)
+    let historySection = '';
+    if (Array.isArray(history) && history.length > 0) {
+      const historyText = history
+        .slice(-6)
+        .map(m => `${m.role === 'user' ? 'STUDENT' : 'ASSISTANT'}: ${String(m.content || '').substring(0, 300)}`)
+        .join('\n');
+      historySection = `\nCONVERSATION SO FAR:\n${historyText}\n`;
+    }
+
     return `${systemRules}
 
 CONTEXT INFORMATION:
 ${contextText || '(No relevant information found)'}
-
+${historySection}
 ${instruction}
 
 USER QUESTION: ${userQuery}
@@ -235,34 +270,42 @@ USER QUESTION: ${userQuery}
 RESPONSE:`;
   }
 
-  async generateResponse(userQuery, context = []) {
+  // Message de quota atteint, dans la langue de la question.
+  // Utilisé par le contrôleur quand le streaming échoue APRÈS l'envoi
+  // des en-têtes : on ne peut plus renvoyer un code HTTP, seulement du texte.
+  rateLimitReply(userQuery) {
+    return rateLimitMessage(this._detectQueryLanguage(userQuery || ''));
+  }
+
+  async generateResponse(userQuery, context = [], history = []) {
     console.log(`[AIService] Generating final response with Groq for query: "${userQuery}". Context items: ${context.length}`);
     const detectedLang = this._detectQueryLanguage(userQuery);
 
     const SYSTEM_RULES = this._buildSystemRules(detectedLang);
-    const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang);
+    const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang, history);
 
     try {
       const answer = await makeGroqRequest(fullPrompt, GENERATE_MODEL, 0.1);
       console.log('[AIService] Groq final response:', answer.substring(0, 150) + '...');
       return answer;
     } catch (error) {
-      console.error('[AIService] Failed to generate final response.', error);
+      console.error('[AIService] Failed to generate final response:', error.message);
+      if (error.isRateLimit) return rateLimitMessage(detectedLang);
       return "Je suis désolé, une erreur technique s'est produite. Veuillez réessayer.";
     }
   }
 
-  async generateResponseStream(userQuery, context = []) {
+  async generateResponseStream(userQuery, context = [], history = []) {
     console.log(`[AIService] Generating streaming response with Groq for query: "${userQuery}". Context items: ${context.length}`);
-    
+
     try {
       const detectedLang = this._detectQueryLanguage(userQuery);
       console.log(`[AIService] Detected language: ${detectedLang}`);
 
       const SYSTEM_RULES = this._buildSystemRules(detectedLang);
       console.log(`[AIService] System rules built. Length: ${SYSTEM_RULES.length}`);
-      
-      const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang);
+
+      const fullPrompt   = this._buildPrompt(SYSTEM_RULES, userQuery, context, detectedLang, history);
       console.log(`[AIService] Full prompt built. Length: ${fullPrompt.length}`);
 
       const stream = await makeGroqRequest(fullPrompt, GENERATE_MODEL, 0.1, true);

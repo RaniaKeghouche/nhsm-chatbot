@@ -7,10 +7,10 @@
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
-const mongoose = require('c:/Users/kegho/Desktop/web/NHSM/node_modules/mongoose');
-const config   = require('c:/Users/kegho/Desktop/web/NHSM/src/config/config');
-const aiService = require('c:/Users/kegho/Desktop/web/NHSM/src/services/aiService');
-const kbService = require('c:/Users/kegho/Desktop/web/NHSM/src/services/knowledgeBaseService');
+const mongoose = require('mongoose');
+const config   = require('./src/config/config');
+const aiService = require('./src/services/aiService');
+const kbService = require('./src/services/knowledgeBaseService');
 
 // ──────────────────────────────────────────────
 // Test cases: one per DB collection + edge cases

@@ -1,10 +1,17 @@
 // src/middleware/security.js
 const rateLimit = require('express-rate-limit');
 
-// Rate limiting BEAUCOUP plus strict
+// ⚠️ Attention au NAT : sur le réseau du campus, tous les étudiants peuvent
+// sortir avec la MÊME IP publique et donc partager le même quota. D'où une
+// valeur réglable sans redéploiement via RATE_LIMIT_MAX.
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_REQ   = parseInt(process.env.RATE_LIMIT_MAX, 10) || 30;
+
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Seulement 20 requêtes max (au lieu de 50)
+  windowMs: WINDOW_MS,
+  max: MAX_REQ,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: {
     success: false,
     message: 'Limite de requêtes atteinte. Réessayez dans 15 minutes.'
@@ -14,8 +21,11 @@ const apiLimiter = rateLimit({
 // Rate limiter spécial pour les gros messages
 const sizeLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 5, // Seulement 5 gros messages
-  skip: (req) => req.body.query && req.body.query.length < 200,
+  max: parseInt(process.env.RATE_LIMIT_LONG_MAX, 10) || 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // req.body peut être absent si le parsing JSON a échoué → optional chaining
+  skip: (req) => !req.body?.query || req.body.query.length < 200,
   message: {
     success: false,
     message: 'Trop de messages longs. Attendez 5 minutes.'
@@ -60,7 +70,23 @@ const validateQuery = (req, res, next) => {
       message: 'Message incohérent détecté.'
     });
   }
-  
+
+  // 🛡️ VALIDATION DE L'HISTORIQUE DE CONVERSATION (#5)
+  // L'historique est optionnel, mais s'il est présent il doit être raisonnable
+  const { history } = req.body;
+  if (history !== undefined) {
+    if (!Array.isArray(history) || history.length > 12) {
+      console.warn(`[SECURITY] Invalid history from IP ${req.ip}`);
+      return res.status(400).json({ success: false, message: 'Historique invalide.' });
+    }
+    const totalSize = history.reduce((sum, m) =>
+      sum + (m && typeof m.content === 'string' ? m.content.length : 0), 0);
+    if (totalSize > 8000) {
+      console.warn(`[SECURITY] Oversized history blocked: ${totalSize} chars from IP ${req.ip}`);
+      return res.status(400).json({ success: false, message: 'Historique trop volumineux.' });
+    }
+  }
+
   next();
 };
 
@@ -83,13 +109,16 @@ function detectRepetition(text) {
 }
 
 // Fonction pour détecter le nonsense
+// ⚠️ Inclut l'arabe (؀-ۿ), les chiffres et la ponctuation courante
+// — sinon les questions en arabe/derdja seraient bloquées comme "nonsense" !
 function detectNonsense(text) {
   const chars = text.toLowerCase();
   const totalChars = chars.length;
-  
-  // Compter les caractères non-alphabétiques
-  const nonAlphaCount = (chars.match(/[^a-zA-Zàâäéèêëïîôöùûüÿç\s]/g) || []).length;
-  
+
+  // Compter les caractères qui ne sont ni lettres (latin/arabe), ni chiffres,
+  // ni ponctuation normale
+  const nonAlphaCount = (chars.match(/[^a-zA-Z0-9àâäéèêëïîôöùûüÿçœæ؀-ۿ\s'’?,.!;:()\-]/g) || []).length;
+
   return nonAlphaCount / totalChars;
 }
 
